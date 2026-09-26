@@ -1,0 +1,14 @@
+*.iml
+.gradle
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+app/build/
+*.hprof
+
+# Explicitly ensure the APK is tracked
+!Air Connect pro v1.0.apk

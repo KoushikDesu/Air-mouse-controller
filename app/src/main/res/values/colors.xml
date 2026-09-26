@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark Obsidian Background -->
+    <color name="bg_dark">#0B0D13</color>
+    
+    <!-- True Neutral Frosted Glass (White Translucency on Dark) -->
+    <color name="glass_surface">#14FFFFFF</color>
+    <color name="glass_surface_subtle">#0AFFFFFF</color>
+    <color name="glass_surface_active">#28FFFFFF</color>
+    <color name="glass_stroke">#26FFFFFF</color>
+    <color name="glass_stroke_bright">#4DFFFFFF</color>
+
+    <!-- Frosted Button States -->
+    <color name="glass_btn_bg">#18FFFFFF</color>
+    <color name="glass_btn_pressed">#3DFFFFFF</color>
+    <color name="glass_btn_border">#30FFFFFF</color>
+
+    <!-- Typography -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#94A3B8</color>
+    <color name="text_muted">#64748B</color>
+
+    <!-- Status Indicators -->
+    <color name="status_green">#10B981</color>
+    <color name="status_amber">#F59E0B</color>
+    <color name="status_red">#EF4444</color>
+
+    <color name="status_connected">#10B981</color>
+    <color name="status_disconnected">#EF4444</color>
+    <color name="status_advertising">#F59E0B</color>
+
+    <!-- Backward compatibility aliases (mapped to frosted glass tones) -->
+    <color name="cyan_accent">#FFFFFF</color>
+    <color name="cyan_glow">#33FFFFFF</color>
+    <color name="blue_accent">#E2E8F0</color>
+</resources>

@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">Air Mouse Pro</string>
+    <string name="title_controller">Air Mouse &amp; Media</string>
+    <string name="status_disconnected">Disconnected • Tap Start</string>
+    <string name="status_advertising">Advertising • Connect on PC</string>
+    <string name="status_connected">Connected • Ready</string>
+
+    <string name="btn_start_service">START AIR MOUSE</string>
+    <string name="btn_stop_service">STOP AIR MOUSE</string>
+
+    <string name="click_left">LEFT</string>
+    <string name="click_middle">MIDDLE</string>
+    <string name="click_right">RIGHT</string>
+
+    <string name="vol_down">Vol -</string>
+    <string name="vol_up">Vol +</string>
+    <string name="vol_mute">Mute</string>
+    <string name="bright_down">🔅 Dim</string>
+    <string name="bright_up">🔆 Bright</string>
+    <string name="media_prev">⏮</string>
+    <string name="media_play">⏯</string>
+    <string name="media_next">⏭</string>
+
+    <string name="air_clutch_hint">HOLD TO MOVE CURSOR\n(Air Mouse Clutch)</string>
+    <string name="recenter">Recenter / Reset</string>
+</resources>

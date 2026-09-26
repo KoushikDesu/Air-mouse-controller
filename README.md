@@ -1,23 +1,27 @@
 # 🖱️ Air Connect Pro (Bluetooth Air Mouse & Precision Trackpad)
 
-[![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B%20(API%2026%2B)-3DDC84?logo=android&logoColor=white)](#)
-[![Connection](https://img.shields.io/badge/Connection-Bluetooth%20HID%20(Offline)-0078D7?logo=bluetooth&logoColor=white)](#)
-[![Design](https://img.shields.io/badge/Design-OxygenOS%20Frosted%20Glass-white?logo=oneplus&logoColor=red)](#)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](#)
+[![Download APK](https://img.shields.io/badge/Download-AirConnectPro.apk-success?style=for-the-badge&logo=android&logoColor=white)](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v1.0/AirConnectPro.apk)
+[![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#)
+[![Connection](https://img.shields.io/badge/Bluetooth-HID%20(100%25%20Offline)-0078D7?style=for-the-badge&logo=bluetooth&logoColor=white)](#)
 
-Turn your Android smartphone into an ultra-responsive **Air Mouse**, **Precision Laptop Trackpad**, and **Multimedia Remote Control** for your laptop (Windows 10/11, macOS, Linux).
+Turn your Android smartphone into an ultra-responsive **Air Mouse**, **Laptop Precision Trackpad**, and **Multimedia Remote Control** for your laptop (Windows 10/11, macOS, Linux).
 
 **100% Offline • Zero Laptop Software or Drivers Required • Hardware-Level Bluetooth HID**
 
 ---
 
-## 📥 Download Ready-to-Install APK
+## 📥 Direct APK Download & One-Tap Install
 
-Get the latest pre-compiled, tested APK directly from this repository:
+Click the direct download button below to download the APK directly to your phone:
 
-👉 **[Download Air Connect pro v1.0.apk](Air%20Connect%20pro%20v1.0.apk?raw=true)** 👈
+### 🚀 **[👉 CLICK HERE TO DOWNLOAD AirConnectPro.apk 👈](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v1.0/AirConnectPro.apk)**
 
-*(File size: ~11 MB. Compatible with any phone running Android 8.0 or newer with a built-in gyroscope).*
+> **Alternative Direct Link:** [Download from Repository (Raw APK)](https://github.com/KoushikDesu/Air-mouse-controller/raw/main/AirConnectPro.apk)
+
+### 📲 How to Install in 3 Easy Steps:
+1. Tap the **Download link** above from your smartphone browser (Chrome, Samsung Internet, etc.).
+2. Once the download finishes, tap the **"Download complete"** notification (or open **Files / Downloads**).
+3. Tap **AirConnectPro.apk** and press **Install**. *(If prompted, enable "Allow installation from this source")*.
 
 ---
 
@@ -25,12 +29,12 @@ Get the latest pre-compiled, tested APK directly from this repository:
 
 ### 1. 🪂 Gyroscope Air Mouse (Free-Hand Pointer)
 - Uses your phone's built-in 3-axis **hardware gyroscope** (`Sensor.TYPE_GYROSCOPE`) running at maximum hardware sampling frequency (`SENSOR_DELAY_GAME`).
-- Translate physical hand motion in the air into pixel-perfect pointer movement on your laptop screen.
-- **Independent Free-Motion Mode**: Move pointer effortlessly without holding down any button.
+- Translates physical hand motion in the air into pixel-perfect pointer movement on your laptop screen.
+- **Independent Free-Motion Mode**: Move the pointer effortlessly without holding down any button.
 - **Air Clutch Mode**: Touch the central trackpad to guide the pointer; lift your thumb to freeze the cursor and comfortably reposition your hand.
 
 ### 2. 💻 Laptop Precision Trackpad & Multi-Touch Gestures
-The central frosted-glass pad doubles as an ultra-smooth laptop trackpad:
+The central frosted-glass pad functions exactly like a laptop trackpad:
 | Gesture | Action on Laptop |
 | :--- | :--- |
 | **1-Finger Drag** | Smooth, continuous cursor navigation |
@@ -48,10 +52,10 @@ When the app is open on your phone screen, your phone's physical side buttons ac
 - Equipped with **Microsoft Swift Pair BLE Beacon** (`0x0006`).
 - As soon as you tap **"Make Discoverable / Pair with Laptop"**, your Windows 10/11 laptop displays a native system notification toast:
   > *"Air Mouse Pro found. Connect to this device?"*
-- Connect with a single click—no digging through deep Bluetooth menus!
+- Connect with a single click—no digging through Bluetooth menus!
 
 ### 5. 🎛️ Surrounding Laptop Controls (HID Consumer Control)
-No need to touch your laptop keyboard:
+Control your laptop without touching its keyboard:
 - **Volume Controls**: Volume Up (`+`), Volume Down (`-`), Instant Audio Mute.
 - **Display Brightness**: Increase (`🔆`) or Decrease (`🔅`) laptop screen brightness.
 - **Media Playback**: Previous Track (`⏮`), Play / Pause (`⏯`), Next Track (`⏭`).
@@ -92,8 +96,8 @@ Unlike Wi-Fi mice or remote desktop apps, **Air Connect Pro requires NO server s
 ## 🚀 Setup & Pairing Guide
 
 ### Step 1: Install the APK
-1. Download **[Air Connect pro v1.0.apk](Air%20Connect%20pro%20v1.0.apk?raw=true)** onto your Android smartphone.
-2. Tap the downloaded file to install. If prompted, allow *"Install from Unknown Sources"*.
+1. Download **[AirConnectPro.apk](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v1.0/AirConnectPro.apk)** onto your Android smartphone.
+2. Tap the downloaded file to install.
 
 ### Step 2: Grant Permissions
 1. Open **Air Connect Pro**.
@@ -102,7 +106,7 @@ Unlike Wi-Fi mice or remote desktop apps, **Air Connect Pro requires NO server s
    - High sampling sensor permission (granted automatically for gyroscope tracking).
 
 ### Step 3: Pair with Laptop
-#### Method A: Microsoft Swift Pair (Fastest on Windows 10/11)
+#### Method A: Microsoft Swift Pair (Windows 10/11)
 1. Turn on Bluetooth on your laptop (**Settings → Bluetooth & devices**).
 2. Ensure *"Show notifications to connect using Swift Pair"* is enabled in Windows Bluetooth settings.
 3. In the phone app, tap **"Make Discoverable / Pair with Laptop"**.
@@ -157,30 +161,6 @@ Unlike Wi-Fi mice or remote desktop apps, **Air Connect Pro requires NO server s
 
 ---
 
-## 🛠️ Building from Source Code
-
-If you prefer building the project yourself in Android Studio:
-
-### Prerequisites
-- **Android Studio Ladybug (2024.2+)** or **Android Studio Iguana / Jellyfish**
-- **Android SDK Platform 34 or 35**
-- **Java Development Kit (JDK 17 or 21)**
-- Android Phone with Bluetooth 4.2+ and Gyroscope
-
-### Steps
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/KoushikDesu/Air-mouse-controller.git
-   ```
-2. Open **Android Studio** and select **File → Open...**, selecting the cloned folder.
-3. Build the APK:
-   - Select **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
-   - APK will be generated at `app/build/outputs/apk/debug/app-debug.apk`.
-
-*(Note: The project is written in 100% pure Java to eliminate offline Kotlin daemon sync errors).*
-
----
-
 ## ❓ Troubleshooting & FAQs
 
 #### Q: The laptop says "Paired", but the cursor is not moving.
@@ -195,4 +175,4 @@ If you prefer building the project yourself in Android Studio:
 ---
 
 ## 📄 License
-This project is open-source and released under the [MIT License](LICENSE).
+This project is open-source and released under the MIT License.

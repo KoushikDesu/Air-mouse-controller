@@ -1,9 +1,8 @@
 # 🖱️ Air Connect Pro (Bluetooth Air Mouse, Fullscreen Trackpad & Screen Extender)
 
-[![Download APK](https://img.shields.io/badge/Download-AirConnectPro.apk-success?style=for-the-badge&logo=android&logoColor=white)](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v1.0/AirConnectPro.apk)
+[![Download Latest v0.5](https://img.shields.io/badge/Download%20Latest-v0.5%20APK-success?style=for-the-badge&logo=android&logoColor=white)](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v0.5/AirConnectPro-v0.5.apk)
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#)
 [![Connection](https://img.shields.io/badge/Bluetooth-HID%20(100%25%20Offline)-0078D7?style=for-the-badge&logo=bluetooth&logoColor=white)](#)
-[![Theme](https://img.shields.io/badge/Theme-OxygenOS%20Frosted%20Glass-white?style=for-the-badge)](#)
 
 Turn your Android smartphone into an ultra-responsive **Air Mouse**, **Fullscreen Laptop Precision Trackpad**, and **Screen Extender Display** for your laptop (Windows 10/11, macOS, Linux).
 
@@ -11,18 +10,29 @@ Turn your Android smartphone into an ultra-responsive **Air Mouse**, **Fullscree
 
 ---
 
-## 📥 Direct APK Download & One-Tap Install
+## 📥 Download Latest Version (v0.5)
 
-Click the button below to download the latest APK directly to your phone:
+Click the direct download button below to download the latest release (**v0.5**) directly to your phone:
 
-### 🚀 **[👉 CLICK HERE TO DOWNLOAD AirConnectPro.apk 👈](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v1.0/AirConnectPro.apk)**
+### 🚀 **[👉 CLICK HERE TO DOWNLOAD AirConnectPro-v0.5.apk (Latest) 👈](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v0.5/AirConnectPro-v0.5.apk)**
 
-> **Alternative Direct Link:** [Download from Repository (Raw APK)](https://github.com/KoushikDesu/Air-mouse-controller/raw/main/AirConnectPro.apk)
+> **Alternative Direct Link:** [Download from Repository (Raw v0.5 APK)](https://github.com/KoushikDesu/Air-mouse-controller/raw/main/AirConnectPro-v0.5.apk)
 
 ### 📲 How to Install in 3 Easy Steps:
 1. Tap the **Download link** above from your smartphone browser (Chrome, Samsung Internet, etc.).
 2. Once the download finishes, tap the **"Download complete"** notification (or open **Files / Downloads**).
-3. Tap **AirConnectPro.apk** and press **Install**. *(If prompted, enable "Allow installation from this source")*.
+3. Tap **AirConnectPro-v0.5.apk** and press **Install**. *(If prompted, enable "Allow installation from this source")*.
+
+---
+
+## 📦 Repository Versions Available
+
+Both versions are archived and available in this repository:
+
+| Version | Status | Description |
+| :--- | :--- | :--- |
+| **v0.5** | 🟢 **Latest** | **3 Controller Modes**: Fullscreen Precision Trackpad with **Shadow Monarch** wallpaper, Hold-to-Drag (Drag-and-Drop), Right-Edge Volume Scroll, Screen Extender (USB Primary, Bluetooth, Wi-Fi), and OxygenOS Smart Sidebar (1.9s auto-docking ball). |
+| **v0.4** | ⚪ **Base** | Original Air Mouse Controller with central frosted clutch, dedicated mouse buttons, media keys, and Microsoft Swift Pair beacon. |
 
 ---
 
@@ -56,7 +66,7 @@ Tap the **3-Bar Menu Button** (or the Floating Sidebar Ball) to switch between 3
 
 ### Mode 2: 🖱️ Fullscreen Precision Trackpad
 Covers your phone's **entire display** as a giant laptop touchpad:
-- **Default Wallpaper**: High-resolution **Shadow Monarch** wallpaper, rendered with a custom dimming layer so you can see your finger and the screen comfortably.
+- **Dimmed Monarch Wallpaper**: High-resolution **Shadow Monarch** wallpaper, rendered with a custom dimming layer so you can see your fingers and screen clearly.
 - **Laptop Multi-Touch Gestures**:
   - **1-Finger Drag**: Smooth, high-precision cursor movement.
   - **1-Finger Tap**: Left Click.
@@ -102,7 +112,7 @@ Access Settings from the 3-bar menu:
 ## ⚡ Setup & Pairing Guide
 
 ### Step 1: Install the APK
-1. Download **[AirConnectPro.apk](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v1.0/AirConnectPro.apk)**.
+1. Download **[AirConnectPro-v0.5.apk](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v0.5/AirConnectPro-v0.5.apk)**.
 2. Tap the file to install on Android.
 
 ### Step 2: Grant Permissions

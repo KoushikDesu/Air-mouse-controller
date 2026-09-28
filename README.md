@@ -64,26 +64,26 @@ Tap the **3-Bar Menu Button** (or the Floating Sidebar Ball) to switch between 3
 
 ---
 
-### Mode 2: 🖱️ Fullscreen Precision Trackpad
-Covers your phone's **entire display** as a giant laptop touchpad:
-- **Dimmed Monarch Wallpaper**: High-resolution **Shadow Monarch** wallpaper, rendered with a custom dimming layer so you can see your fingers and screen clearly.
-- **Laptop Multi-Touch Gestures**:
-  - **1-Finger Drag**: Smooth, high-precision cursor movement.
+### Mode 2: 🖱️ Fullscreen Precision Trackpad (Horizontal / Landscape)
+Covers your phone's **entire display** in widescreen landscape orientation as a giant laptop touchpad:
+- **Horizontal / Landscape Mode**: Automatically rotates to a comfortable widescreen horizontal layout matching your laptop's screen proportions.
+- **Dimmed Monarch Wallpaper**: Features the glowing Solo Leveling Shadow Monarch landscape artwork with an adjustable dimming layer for optimal visibility.
+- **Precision Gestures**:
+  - **1-Finger Drag**: Ultra-low latency, smooth cursor motion.
   - **1-Finger Tap**: Left Click.
-  - **Touch & Hold to Drag (Drag & Drop)**: Touch and hold for 300ms without lifting to lock Left Click, then drag anywhere to highlight text, select multiple files, or move windows!
+  - **Double-Tap and Drag (Tap twice and hold)**: Quickly tap twice and keep your finger down on the second tap to lock left click and drag icons, windows, or files!
+  - **Click & Hold to Select**: Touch and hold still for 300ms to lock Left Click, then drag to select multiple files or highlight text.
   - **2-Finger Tap**: Right Click (opens context menus).
-  - **2-Finger Swipe Up/Down**: Smooth vertical page scrolling.
-- **Right-Edge Volume Scroll**: Drag vertically along the right edge of the screen to adjust laptop volume up or down with tactile haptic pulses and on-screen volume HUD!
+  - **2-Finger Scroll**: Vertical scrolling through webpages and documents.
+- **Right-Edge Volume Scroll**: Slide up or down along the right edge to control laptop master volume with haptic ticks and on-screen volume indicator.
 
 ---
 
-### Mode 3: 🖥️ Screen Extender / Dual Display
-Extends or duplicates your laptop screen onto your phone:
-- **Prioritized Connection Pipeline**:
-  1. ⚡ **USB (Primary - Fastest & Zero Lag)**: Connect via standard USB cable (supports USB tethering & ADB port forwarding).
-  2. 🔵 **Bluetooth HID**: Transmits instant pointer and touch input.
-  3. 📶 **Wi-Fi Socket**: Direct socket connection on port `8080`.
-- **Integrated Touch Feedback**: Tapping the projected display sends mouse clicks directly to the laptop.
+### Mode 3: 🖥️ Screen Extender / Second Display (Spacedesk-Style)
+Turn your phone into a secondary external monitor for your laptop:
+- **Low-Latency Display Streaming**: 60 FPS screen projection with high-efficiency RGB565 rendering.
+- **Flexible Connection**: Works over High-Speed USB (tethering/ADB) for zero latency, or over local Wi-Fi.
+- **Touch Input Forwarding**: Touch the phone's extended display to click and interact directly with your laptop screen.
 
 ---
 

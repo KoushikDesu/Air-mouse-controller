@@ -1,37 +1,38 @@
 # 🖱️ Air Connect Pro (Bluetooth Air Mouse, Fullscreen Trackpad & Screen Extender)
 
-[![Download Latest v0.5](https://img.shields.io/badge/Download%20Latest-v0.5%20APK-success?style=for-the-badge&logo=android&logoColor=white)](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v0.5/AirConnectPro-v0.5.apk)
+[![Download Latest v0.6](https://img.shields.io/badge/Download%20Latest-v0.6%20APK-success?style=for-the-badge&logo=android&logoColor=white)](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v0.6/AirConnectPro-v0.6.apk)
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#)
 [![Connection](https://img.shields.io/badge/Bluetooth-HID%20(100%25%20Offline)-0078D7?style=for-the-badge&logo=bluetooth&logoColor=white)](#)
 
-Turn your Android smartphone into an ultra-responsive **Air Mouse**, **Fullscreen Laptop Precision Trackpad**, and **Screen Extender Display** for your laptop (Windows 10/11, macOS, Linux).
+Turn your Android smartphone into an ultra-responsive **Air Mouse**, **Fullscreen Laptop Precision Trackpad**, and **120 FPS Fullscreen Display Extender** for your laptop (Windows 10/11, macOS, Linux).
 
-**100% Offline • Zero Laptop Software or Drivers Required • Hardware-Level Bluetooth HID**
+**100% Offline • Zero Latency • Hardware-Level Bluetooth HID + 120 FPS USB Display Streaming**
 
 ---
 
-## 📥 Download Latest Version (v0.5)
+## 📥 Download Latest Version (v0.6)
 
-Click the direct download button below to download the latest release (**v0.5**) directly to your phone:
+Click the direct download button below to download the latest release (**v0.6**) directly to your phone:
 
-### 🚀 **[👉 CLICK HERE TO DOWNLOAD AirConnectPro-v0.5.apk (Latest) 👈](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v0.5/AirConnectPro-v0.5.apk)**
+### 🚀 **[👉 CLICK HERE TO DOWNLOAD AirConnectPro-v0.6.apk (Latest) 👈](https://github.com/KoushikDesu/Air-mouse-controller/releases/download/v0.6/AirConnectPro-v0.6.apk)**
 
-> **Alternative Direct Link:** [Download from Repository (Raw v0.5 APK)](https://github.com/KoushikDesu/Air-mouse-controller/raw/main/AirConnectPro-v0.5.apk)
+> **Alternative Direct Link:** [Download from Repository (Raw v0.6 APK)](https://github.com/KoushikDesu/Air-mouse-controller/raw/main/AirConnectPro-v0.6.apk)
 
 ### 📲 How to Install in 3 Easy Steps:
 1. Tap the **Download link** above from your smartphone browser (Chrome, Samsung Internet, etc.).
 2. Once the download finishes, tap the **"Download complete"** notification (or open **Files / Downloads**).
-3. Tap **AirConnectPro-v0.5.apk** and press **Install**. *(If prompted, enable "Allow installation from this source")*.
+3. Tap **AirConnectPro-v0.6.apk** and press **Install**. *(If prompted, enable "Allow installation from this source")*.
 
 ---
 
 ## 📦 Repository Versions Available
 
-Both versions are archived and available in this repository:
+All versions are archived and available in this repository:
 
 | Version | Status | Description |
 | :--- | :--- | :--- |
-| **v0.5** | 🟢 **Latest** | **3 Controller Modes**: Fullscreen Precision Trackpad with **Shadow Monarch** wallpaper, Hold-to-Drag (Drag-and-Drop), Right-Edge Volume Scroll, Screen Extender (USB Primary, Bluetooth, Wi-Fi), and OxygenOS Smart Sidebar (1.9s auto-docking ball). |
+| **v0.6** | 🟢 **Latest** | **True Edge-to-Edge Fullscreen Screen Extender**: Zero UI borders/bars, immersive sticky mode, **120 FPS / 144 FPS AMOLED display support**, OpenCV SIMD streamer, automatic USB & same-network Wi-Fi streaming. |
+| **v0.5** | ⚪ **Stable** | 3 Controller Modes: Fullscreen Precision Trackpad with **Shadow Monarch** wallpaper, Hold-to-Drag, Double-Tap to Drag, Right-Edge Volume Scroll, and OxygenOS Smart Sidebar. |
 | **v0.4** | ⚪ **Base** | Original Air Mouse Controller with central frosted clutch, dedicated mouse buttons, media keys, and Microsoft Swift Pair beacon. |
 
 ---

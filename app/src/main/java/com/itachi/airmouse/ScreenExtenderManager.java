@@ -132,6 +132,8 @@ public class ScreenExtenderManager {
             options.inPreferredConfig = Bitmap.Config.RGB_565;
             options.inMutable = true;
 
+            final java.util.concurrent.atomic.AtomicBoolean isRendering = new java.util.concurrent.atomic.AtomicBoolean(false);
+
             while (isRunning && !client.isClosed()) {
                 int length = dis.readInt();
                 if (length <= 0 || length > 25_000_000) {
@@ -152,11 +154,17 @@ public class ScreenExtenderManager {
                         fpsStartTime = now;
                     }
                     final Bitmap frameBitmap = bitmap;
-                    mainHandler.post(() -> {
-                        if (callback != null) {
-                            callback.onFrameReceived(frameBitmap);
-                        }
-                    });
+                    if (isRendering.compareAndSet(false, true)) {
+                        mainHandler.post(() -> {
+                            try {
+                                if (callback != null) {
+                                    callback.onFrameReceived(frameBitmap);
+                                }
+                            } finally {
+                                isRendering.set(false);
+                            }
+                        });
+                    }
                 }
             }
         } catch (Exception ignored) {

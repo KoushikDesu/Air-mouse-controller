@@ -1,10 +1,11 @@
 """
 Air Connect Pro - Fullscreen Laptop Screen Extender
 Ultra-low latency, high-FPS edge-to-edge display streaming with:
-  1. Strict USB First Priority (Auto-switches from Wi-Fi to USB immediately upon cable connection).
-  2. Real-time Hardware Mouse Cursor drawing (visible & responsive on phone).
-  3. Dynamic Multi-Monitor Support (Supports Win + P -> Extend / Duplicate / Second Screen Only).
-  4. Native High-DPI Razor-Sharp Text rendering at 120 FPS.
+  1. Multi-threaded Pipelined Grab + Stream Engine (Overlapped capture & encode for maximum 60-120 FPS).
+  2. Strict USB First Priority (Auto-switches from Wi-Fi to USB immediately upon cable connection).
+  3. Real-time Hardware Mouse Cursor drawing (visible & responsive on phone).
+  4. Dynamic Multi-Monitor Support (Supports Win + P -> Extend / Duplicate / Second Screen Only).
+  5. Fast SIMD JPEG compression with zero queue lag.
 """
 
 import sys
@@ -16,10 +17,12 @@ import ctypes
 from ctypes import wintypes
 import io
 import os
+import queue
 import shutil
 import socket
 import struct
 import subprocess
+import threading
 import time
 
 # Try importing high-speed computer vision modules
@@ -241,16 +244,26 @@ def main():
     parser = argparse.ArgumentParser(description="Air Connect Pro Screen Extender")
     parser.add_argument("--fps", type=int, default=120, help="Target FPS (60, 90, 120, 144). Default is 120.")
     parser.add_argument("--ip", type=str, default=None, help="Optional manual phone IP for Wi-Fi stream.")
-    parser.add_argument("--scale", type=float, default=1.0, help="Resolution scale (default 1.0 for native 1080p).")
+    parser.add_argument("--res", type=str, default="1600x900", help="Stream resolution (e.g. '1600x900', '1280x720', '1920x1080'). Default: 1600x900 for high FPS.")
+    parser.add_argument("--quality", type=int, default=72, help="JPEG quality (1-100). Default: 72.")
     args = parser.parse_args()
 
     target_fps = max(30, min(144, args.fps))
     frame_interval = 1.0 / target_fps
 
+    # Parse target resolution
+    target_w, target_h = 1600, 900
+    try:
+        parts = args.res.lower().split("x")
+        target_w, target_h = int(parts[0]), int(parts[1])
+    except Exception:
+        target_w, target_h = 1600, 900
+
     print("=" * 68)
     print("   AIR CONNECT PRO - FULLSCREEN LAPTOP DISPLAY EXTENDER")
     print("=" * 68)
     print(f"  Target Frame Rate : {target_fps} FPS (High-End AMOLED 120Hz/144Hz)")
+    print(f"  Stream Resolution : {target_w}x{target_h} (Optimized for High FPS)")
     print(f"  Priority Policy   : [FIRST PRIORITY: USB CABLE] > [FALLBACK: Wi-Fi]")
     print(f"  Cursor Mode       : Hardware Mouse Pointer Overlay (Live Drawn)")
     print(f"  Windows Projection: Win + P (Extend / Duplicate / Second Screen)")
@@ -309,6 +322,39 @@ def main():
         last_usb_check = time.time()
         last_mon_check = time.time()
 
+        # Multi-Threaded Pipelined Producer-Consumer Architecture:
+        # Thread 1: Grabber continuously captures latest monitor frame without stalling.
+        # Thread 2: Main loop encodes and sends via TCP.
+        frame_queue = queue.Queue(maxsize=1)
+        stop_grabber = threading.Event()
+        current_active_mon = [active_mon]
+
+        def grabber_thread_func():
+            attach_desktop()
+            grabber_sct = mss.MSS()
+            while not stop_grabber.is_set():
+                try:
+                    mon = current_active_mon[0]
+                    shot = grabber_sct.grab(mon)
+                    raw = np.frombuffer(shot.raw, dtype=np.uint8).reshape((shot.height, shot.width, 4))
+                    # Atomic update of latest frame
+                    try:
+                        frame_queue.put_nowait((raw, mon))
+                    except queue.Full:
+                        try:
+                            frame_queue.get_nowait()
+                        except queue.Empty:
+                            pass
+                        try:
+                            frame_queue.put_nowait((raw, mon))
+                        except queue.Full:
+                            pass
+                except Exception:
+                    time.sleep(0.01)
+
+        grab_thread = threading.Thread(target=grabber_thread_func, daemon=True)
+        grab_thread.start()
+
         try:
             while True:
                 cycle_start = time.time()
@@ -321,6 +367,7 @@ def main():
                     current_mon, current_desc = select_target_monitor(sct)
                     if current_desc != mon_desc:
                         active_mon = current_mon
+                        current_active_mon[0] = active_mon
                         mon_desc = current_desc
                         print(f"\n[DISPLAY CHANGED] Now streaming: {mon_desc}")
 
@@ -334,38 +381,32 @@ def main():
                         sock.close()
                         break
 
-                jpeg_data = None
-                img_w, img_h = 1920, 1080
+                try:
+                    raw, cur_mon = frame_queue.get(timeout=0.08)
+                except queue.Empty:
+                    continue
 
-                if HAS_OPENCV and sct is not None:
-                    shot = sct.grab(active_mon)
-                    raw_w, raw_h = shot.width, shot.height
-                    frame = np.frombuffer(shot.raw, dtype=np.uint8).reshape((raw_h, raw_w, 4))
-                    bgr = frame[:, :, :3].copy()
+                bgr = raw[:, :, :3]
+                raw_h, raw_w = bgr.shape[:2]
 
-                    # Scale if requested
-                    scale_x, scale_y = 1.0, 1.0
-                    if args.scale < 1.0:
-                        target_w = int(raw_w * args.scale)
-                        target_h = int(raw_h * args.scale)
-                        scale_x = target_w / float(raw_w)
-                        scale_y = target_h / float(raw_h)
-                        bgr = cv2.resize(bgr, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
-
-                    # Draw hardware mouse cursor onto frame
-                    draw_mouse_cursor(bgr, active_mon['left'], active_mon['top'], scale_x, scale_y)
-
-                    img_w, img_h = bgr.shape[1], bgr.shape[0]
-                    # Quality 80 gives razor-sharp text with compact bandwidth
-                    _, enc = cv2.imencode('.jpg', bgr, [cv2.IMWRITE_JPEG_QUALITY, 80])
-                    jpeg_data = enc.tobytes()
+                if raw_w != target_w or raw_h != target_h:
+                    scale_x = target_w / float(raw_w)
+                    scale_y = target_h / float(raw_h)
+                    bgr_resized = cv2.resize(bgr, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
                 else:
-                    from PIL import ImageGrab
-                    img = ImageGrab.grab()
-                    img_w, img_h = img.size
-                    buf = io.BytesIO()
-                    img.save(buf, format="JPEG", quality=80)
-                    jpeg_data = buf.getvalue()
+                    scale_x, scale_y = 1.0, 1.0
+                    bgr_resized = bgr.copy()
+
+                # Draw hardware mouse cursor onto frame
+                draw_mouse_cursor(bgr_resized, cur_mon['left'], cur_mon['top'], scale_x, scale_y)
+
+                # Fast SIMD JPEG compression (no huffman optimize pass for speed)
+                encode_params = [
+                    cv2.IMWRITE_JPEG_QUALITY, args.quality,
+                    cv2.IMWRITE_JPEG_OPTIMIZE, 0
+                ]
+                _, enc = cv2.imencode('.jpg', bgr_resized, encode_params)
+                jpeg_data = enc.tobytes()
 
                 # Protocol: 4-byte big-endian payload length + JPEG byte payload
                 hdr = struct.pack(">I", len(jpeg_data))
@@ -377,7 +418,7 @@ def main():
                     fps = fps_frames / (now - fps_timer)
                     mbps = (len(jpeg_data) * fps * 8) / (1024.0 * 1024.0)
                     priority_badge = "[USB ⚡ 1st Priority]" if is_usb_active else "[Wi-Fi 🟡]"
-                    print(f"\r  {priority_badge} {fps:.1f} FPS | Target: {target_fps} FPS | Res: {img_w}x{img_h} | {mbps:.2f} Mbps   ", end="", flush=True)
+                    print(f"\r  {priority_badge} {fps:.1f} FPS | Target: {target_fps} FPS | Res: {target_w}x{target_h} | {mbps:.2f} Mbps   ", end="", flush=True)
                     fps_frames = 0
                     fps_timer = now
 
@@ -394,6 +435,7 @@ def main():
         except Exception as e:
             print(f"\nStream paused ({e}). Re-attaching...")
         finally:
+            stop_grabber.set()
             if sock:
                 try:
                     sock.close()

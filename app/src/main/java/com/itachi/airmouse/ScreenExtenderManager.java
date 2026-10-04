@@ -4,8 +4,6 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Handler;
 import android.os.Looper;
-import android.widget.ImageView;
-import android.widget.TextView;
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -86,12 +84,16 @@ public class ScreenExtenderManager {
                     incomingSocket.setReceiveBufferSize(524288);
                 } catch (Exception ignored) {}
 
+                String host = incomingSocket.getInetAddress() != null ? incomingSocket.getInetAddress().getHostAddress() : "";
                 boolean isUsb = incomingSocket.getInetAddress().isLoopbackAddress()
-                        || "127.0.0.1".equals(incomingSocket.getInetAddress().getHostAddress());
+                        || "127.0.0.1".equals(host)
+                        || host.startsWith("10.122.")
+                        || host.startsWith("192.168.42.")
+                        || host.startsWith("192.168.44.");
 
                 synchronized (this) {
                     // USB PRIORITY ENFORCEMENT:
-                    // 1. If currently connected via USB, reject any incoming Wi-Fi connection
+                    // If currently connected via USB, reject any incoming Wi-Fi connection
                     if (currentActiveClient != null && !currentActiveClient.isClosed() && currentClientIsUsb && !isUsb) {
                         try {
                             incomingSocket.close();
@@ -99,7 +101,7 @@ public class ScreenExtenderManager {
                         continue;
                     }
 
-                    // 2. If incoming is USB, or replacing older connection, close previous client
+                    // If incoming is USB, or replacing older connection, close previous client
                     closeCurrentClient();
 
                     currentActiveClient = incomingSocket;
@@ -119,8 +121,14 @@ public class ScreenExtenderManager {
     }
 
     private void handleClientStream(Socket client, boolean isUsb) {
-        String connLabel = isUsb ? "🟢 USB (Ultra-Fast 120 FPS)" : "🟡 Wi-Fi (" + client.getInetAddress().getHostAddress() + ")";
-        notifyStatus(connLabel + " • Streaming", true);
+        String clientIp = client.getInetAddress() != null ? client.getInetAddress().getHostAddress() : "";
+        boolean isUsbEffective = isUsb || client.getInetAddress().isLoopbackAddress()
+                || "127.0.0.1".equals(clientIp)
+                || clientIp.startsWith("10.122.")
+                || clientIp.startsWith("192.168.42.")
+                || clientIp.startsWith("192.168.44.");
+        String connLabel = isUsbEffective ? "USB Cable (High-Speed 120 FPS)" : "Wi-Fi (" + clientIp + ")";
+        notifyStatus(connLabel + " - Streaming", true);
 
         try {
             DataInputStream dis = new DataInputStream(new BufferedInputStream(client.getInputStream(), 131072));
@@ -131,6 +139,7 @@ public class ScreenExtenderManager {
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inPreferredConfig = Bitmap.Config.RGB_565;
             options.inMutable = true;
+            Bitmap reusableBitmap = null;
 
             final java.util.concurrent.atomic.AtomicBoolean isRendering = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -143,13 +152,26 @@ public class ScreenExtenderManager {
                     buffer = new byte[length + 131072];
                 }
                 dis.readFully(buffer, 0, length);
-                Bitmap bitmap = BitmapFactory.decodeByteArray(buffer, 0, length, options);
+
+                // High-performance zero-allocation frame decode via inBitmap buffer reuse
+                if (reusableBitmap != null && !reusableBitmap.isRecycled()) {
+                    options.inBitmap = reusableBitmap;
+                }
+                Bitmap bitmap;
+                try {
+                    bitmap = BitmapFactory.decodeByteArray(buffer, 0, length, options);
+                } catch (IllegalArgumentException e) {
+                    options.inBitmap = null;
+                    bitmap = BitmapFactory.decodeByteArray(buffer, 0, length, options);
+                }
+
                 if (bitmap != null) {
+                    reusableBitmap = bitmap;
                     framesReceived++;
                     long now = System.currentTimeMillis();
                     if (now - fpsStartTime >= 1000) {
                         int fps = (int) (framesReceived * 1000f / (now - fpsStartTime));
-                        notifyStatus(connLabel + " • " + fps + " FPS (" + bitmap.getWidth() + "x" + bitmap.getHeight() + ")", true);
+                        notifyStatus(connLabel + " - " + fps + " FPS (" + bitmap.getWidth() + "x" + bitmap.getHeight() + ")", true);
                         framesReceived = 0;
                         fpsStartTime = now;
                     }

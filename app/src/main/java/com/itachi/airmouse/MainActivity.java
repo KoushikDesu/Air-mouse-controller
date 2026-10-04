@@ -582,6 +582,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onFrameReceived(Bitmap bitmap) {
                 if (ivExtenderSurface != null) {
+                    ivExtenderSurface.setScaleType(ImageView.ScaleType.FIT_CENTER);
                     ivExtenderSurface.setImageBitmap(bitmap);
                     layoutExtenderPlaceholder.setVisibility(View.GONE);
                 }

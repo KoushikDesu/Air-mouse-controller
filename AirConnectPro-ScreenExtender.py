@@ -170,25 +170,44 @@ def setup_adb_forward(serial):
         try: s.close()
         except Exception: pass
 
-def get_network_ips():
-    """Get list of likely IP targets across local Wi-Fi / Tethering."""
-    ips = []
+def get_classified_ips():
+    """
+    Scan local network interfaces and classify them into USB Tethering (RNDIS) and Wi-Fi.
+    Returns: (usb_ips, wifi_ips)
+    """
+    usb_ips = []
+    wifi_ips = []
     try:
-        r = subprocess.run(["ipconfig"], capture_output=True, text=True, timeout=2)
+        r = subprocess.run(["ipconfig", "/all"], capture_output=True, text=True, timeout=2)
+        current = None
         for line in r.stdout.splitlines():
-            if "IPv4 Address" in line:
-                parts = line.split(":")
-                if len(parts) > 1:
-                    base_ip = parts[1].strip()
-                    if base_ip and base_ip.count(".") == 3:
-                        prefix = ".".join(base_ip.split(".")[:3])
-                        for last in [1, 2, 3, 4, 18, 100, 101, 102, 105]:
-                            candidate = f"{prefix}.{last}"
-                            if candidate != base_ip and candidate not in ips:
-                                ips.append(candidate)
+            line_str = line.strip()
+            if line and not line.startswith(' ') and not line.startswith('\t') and ':' in line:
+                adapter_name = line.split(':')[0].strip().lower()
+                current = {'is_usb': False, 'is_wifi': False}
+                if any(k in adapter_name for k in ['wi-fi', 'wireless', 'wlan']):
+                    current['is_wifi'] = True
+            elif current is not None:
+                if 'Description' in line:
+                    desc = line.split(':')[-1].strip().lower()
+                    if any(k in desc for k in ['ndis', 'rndis', 'usb', 'tether', 'remote ndis']):
+                        current['is_usb'] = True
+                    elif any(k in desc for k in ['wi-fi', 'wireless', '802.11', 'wlan']):
+                        current['is_wifi'] = True
+                elif 'IPv4 Address' in line or 'Default Gateway' in line or 'DHCP Server' in line:
+                    import re
+                    for ip in re.findall(r'(\d+\.\d+\.\d+\.\d+)', line):
+                        if not ip.startswith('127.'):
+                            prefix = ".".join(ip.split(".")[:3])
+                            candidates = [ip, f"{prefix}.1", f"{prefix}.18", f"{prefix}.2", f"{prefix}.100", f"{prefix}.101", f"{prefix}.129"]
+                            target_list = usb_ips if current['is_usb'] else (wifi_ips if current['is_wifi'] else None)
+                            if target_list is not None:
+                                for c in candidates:
+                                    if c not in target_list:
+                                        target_list.append(c)
     except Exception:
         pass
-    return ips
+    return usb_ips, wifi_ips
 
 def try_connect(target_ip, port=8080, timeout=0.6):
     """Attempt a quick TCP handshake with socket tuning."""
@@ -213,29 +232,36 @@ def try_connect(target_ip, port=8080, timeout=0.6):
 def find_active_stream_socket(manual_ip=None):
     """
     Detect phone connection with STRICT USB FIRST PRIORITY:
-    1. If USB cable is connected -> ALWAYS choose USB (127.0.0.1 via ADB Forward).
-    2. Only if USB is NOT connected -> Fallback to Wi-Fi.
+    1. Physical ADB USB Tunnel (127.0.0.1:8080 via ADB Forward).
+    2. Physical USB Cable via USB Tethering (RNDIS Remote NDIS 426 Mbps).
+    3. Wi-Fi Wireless LAN (Only as fallback if USB is not connected).
     Returns: (socket, connection_label, is_usb_flag)
     """
+    # 1. PRIORITY 1A: Physical ADB USB Tunnel
     usb_dev = get_connected_usb_device()
     if usb_dev:
-        # FIRST PRIORITY: USB
         setup_adb_forward(usb_dev)
         sock = try_connect("127.0.0.1", 8080, timeout=0.8)
         if sock:
-            return sock, f"High-Speed USB [{usb_dev}] (First Priority - Zero Latency)", True
+            return sock, f"High-Speed USB [ADB: {usb_dev}] (1st Priority - Zero Latency)", True
 
-    # SECOND PRIORITY: Only if USB is NOT connected or not ready, fallback to Wi-Fi
-    if not usb_dev:
-        if manual_ip:
-            sock = try_connect(manual_ip, 8080, timeout=0.8)
-            if sock:
-                return sock, f"Direct Wi-Fi [{manual_ip}] (Fallback)", False
+    # 2. PRIORITY 1B: Physical USB Cable via USB Tethering (Remote NDIS 426 Mbps)
+    usb_ips, wifi_ips = get_classified_ips()
+    for ip in usb_ips:
+        sock = try_connect(ip, 8080, timeout=0.4)
+        if sock:
+            return sock, f"High-Speed USB Cable [USB Tethering: {ip}] (1st Priority - 426 Mbps)", True
 
-        for ip in get_network_ips():
-            sock = try_connect(ip, 8080, timeout=0.3)
-            if sock:
-                return sock, f"Wi-Fi Network [{ip}] (Fallback)", False
+    # 3. PRIORITY 2: Wi-Fi Wireless LAN (Only if USB is not connected)
+    if manual_ip:
+        sock = try_connect(manual_ip, 8080, timeout=0.8)
+        if sock:
+            return sock, f"Direct Wi-Fi [{manual_ip}] (Wireless Fallback)", False
+
+    for ip in wifi_ips:
+        sock = try_connect(ip, 8080, timeout=0.3)
+        if sock:
+            return sock, f"Wi-Fi Network [{ip}] (Wireless Fallback)", False
 
     return None, None, False
 

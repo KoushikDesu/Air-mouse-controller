@@ -31,11 +31,6 @@
     <!-- High sensor sampling rate for smooth 100Hz+ gyroscope tracking -->
     <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
 
-    <!-- Network permissions for Screen Extender socket (USB ADB / Wi-Fi) -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-
     <!-- Foreground service to ensure connection stability -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />

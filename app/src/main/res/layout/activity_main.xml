@@ -539,92 +539,7 @@
         </FrameLayout>
     </FrameLayout>
 
-    <!-- ============================================================== -->
-    <!-- MODE 2: SCREEN EXTENDER (USB Primary, Bluetooth, Wi-Fi)       -->
-    <!-- ============================================================== -->
-    <!-- ============================================================== -->
-    <!-- MODE 2: SCREEN EXTENDER (Full-Bleed Immersive Edge-to-Edge)   -->
-    <!-- ============================================================== -->
-    <FrameLayout
-        android:id="@+id/layoutScreenExtenderMode"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#000000"
-        android:fitsSystemWindows="false"
-        android:visibility="gone">
 
-        <!-- Edge-to-Edge Display Surface (Fills 100% of Screen) -->
-        <FrameLayout
-            android:id="@+id/viewExtenderSurfaceContainer"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="#000000"
-            android:clickable="true"
-            android:focusable="true">
-
-            <ImageView
-                android:id="@+id/ivExtenderSurface"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:contentDescription="Display Surface"
-                android:scaleType="fitCenter" />
-
-            <!-- Standby Overlay / Connection Guide (Only visible when NOT streaming) -->
-            <LinearLayout
-                android:id="@+id/layoutExtenderPlaceholder"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="#0A0D15"
-                android:gravity="center"
-                android:orientation="vertical"
-                android:padding="24dp">
-
-                <!-- Screen Extender Header -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="🖥️ Laptop Screen Extender"
-                    android:textColor="@color/text_primary"
-                    android:textSize="20sp" />
-
-                <TextView
-                    android:id="@+id/tvExtenderConnectionPill"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/glass_card"
-                    android:fontFamily="sans-serif-medium"
-                    android:paddingStart="14dp"
-                    android:paddingTop="6dp"
-                    android:paddingEnd="14dp"
-                    android:paddingBottom="6dp"
-                    android:text="⚡ Ready for USB or Wi-Fi Stream (Up to 120 FPS)"
-                    android:textColor="@color/status_green"
-                    android:textSize="12sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:gravity="center"
-                    android:text="High-Speed 120 FPS Laptop Display Projection\nPlug in USB Cable or connect to same Wi-Fi\nLaunch 'Start-ScreenExtender.bat' on your Laptop"
-                    android:textColor="@color/text_muted"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/tvExtenderIpPort"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:fontFamily="sans-serif"
-                    android:text="Listening on Port 8080"
-                    android:textColor="@color/status_amber"
-                    android:textSize="11sp" />
-            </LinearLayout>
-        </FrameLayout>
-
-    </FrameLayout>
 
     <!-- ============================================================== -->
     <!-- FLOATING SMART SIDEBAR / BALL HANDLE                           -->
@@ -740,20 +655,6 @@
                 android:textColor="@color/text_primary"
                 android:textSize="13sp" />
 
-            <!-- Option 3: Screen Extender -->
-            <Button
-                android:id="@+id/btnMenuOptionScreenExtender"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/glass_menu_item"
-                android:gravity="center_vertical|start"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:stateListAnimator="@null"
-                android:text="🖥️  Screen Extender\n     (USB Primary, BT &amp; Wi-Fi)"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp" />
 
             <!-- Option 4: Settings -->
             <Button

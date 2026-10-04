@@ -1,5 +1,5 @@
 @echo off
-title Air Connect Pro - 120 FPS Laptop Screen Extender
+title Air Connect Pro - Laptop Screen Extender
 echo ============================================================
 echo   Air Connect Pro - Fullscreen Laptop Screen Extender
 echo ============================================================
@@ -18,7 +18,12 @@ if "%FPS_CHOICE%"=="2" set TARGET_FPS=144
 if "%FPS_CHOICE%"=="3" set TARGET_FPS=90
 if "%FPS_CHOICE%"=="4" set TARGET_FPS=60
 
+set SCRIPT_PATH="%~dp0AirConnectPro-ScreenExtender.py"
+if not exist %SCRIPT_PATH% set SCRIPT_PATH="%~dp0BluetoothAirMouse\AirConnectPro-ScreenExtender.py"
+if not exist %SCRIPT_PATH% set SCRIPT_PATH="C:\temporary\AirConnectPro-ScreenExtender.py"
+if not exist %SCRIPT_PATH% set SCRIPT_PATH="C:\temporary\BluetoothAirMouse\AirConnectPro-ScreenExtender.py"
+
 echo.
 echo Starting display stream at %TARGET_FPS% FPS over USB and Wi-Fi...
-python -u "%~dp0AirConnectPro-ScreenExtender.py" --fps %TARGET_FPS%
+python -u %SCRIPT_PATH% --fps %TARGET_FPS%
 pause

@@ -13,7 +13,7 @@ echo.
 set "SCRIPT_DIR=C:\Rarey Temp\Ai long stuff"
 set "SCRIPT_PATH=%SCRIPT_DIR%\AirConnectPro-ScreenExtender.py"
 
-python -u "%SCRIPT_PATH%" --fps 120 --res 1920x1080 --quality 82
+python -u "%SCRIPT_PATH%" --fps 120 --res 2400x1080 --quality 82
 
 echo.
 echo ============================================================

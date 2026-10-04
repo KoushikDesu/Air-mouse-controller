@@ -492,32 +492,19 @@ def main():
 
                 raw_h, raw_w = bgr.shape[:2]
 
-                # Match native target resolution with aspect ratio preservation (zero distortion / zoom)
+                # Fullscreen edge-to-edge scaling (zero black bars, fills 100% of mobile display)
                 if raw_w == target_w and raw_h == target_h:
                     scale_x, scale_y = 1.0, 1.0
-                    offset_x, offset_y = 0, 0
                     bgr_resized = bgr
                 else:
-                    scale = min(target_w / float(raw_w), target_h / float(raw_h))
-                    new_w = max(1, int(raw_w * scale))
-                    new_h = max(1, int(raw_h * scale))
-                    bgr_scaled = cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-                    if new_w == target_w and new_h == target_h:
-                        bgr_resized = bgr_scaled
-                        scale_x, scale_y = scale, scale
-                        offset_x, offset_y = 0, 0
-                    else:
-                        pad_x = (target_w - new_w) // 2
-                        pad_y = (target_h - new_h) // 2
-                        bgr_resized = np.zeros((target_h, target_w, 3), dtype=np.uint8)
-                        bgr_resized[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = bgr_scaled
-                        scale_x, scale_y = scale, scale
-                        offset_x, offset_y = pad_x, pad_y
+                    scale_x = target_w / float(raw_w)
+                    scale_y = target_h / float(raw_h)
+                    bgr_resized = cv2.resize(bgr, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
 
                 # Draw hardware mouse cursor with pixel-perfect alignment
                 mon_l = cur_mon.get('left', 0) if isinstance(cur_mon, dict) else 0
                 mon_t = cur_mon.get('top', 0) if isinstance(cur_mon, dict) else 0
-                draw_mouse_cursor(bgr_resized, mon_l, mon_t, scale_x, scale_y, offset_x, offset_y)
+                draw_mouse_cursor(bgr_resized, mon_l, mon_t, scale_x, scale_y)
 
                 # Ultra-fast SIMD JPEG encoding (crisp text, zero blur, no lag)
                 encode_params = [

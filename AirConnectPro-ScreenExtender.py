@@ -252,10 +252,10 @@ def ensure_extended_display(sct):
     enable_bat = r"C:\Rarey Temp\Ai long stuff\Enable-SecondaryDisplay.bat"
     if os.path.exists(enable_bat):
         print("\n[*] Windows Secondary Extended Display (Display 2) is not yet active.")
-        print("[*] Activating Virtual Extended Monitor (Please click 'YES' on Windows prompt)...")
+        print("[*] Activating Virtual Extended Monitor (Please click 'YES' if Windows prompts)...")
         try:
-            cmd = f'Start-Process cmd.exe -ArgumentList "/c \\"{enable_bat}\\"" -Verb RunAs -Wait'
-            subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd], timeout=15)
+            ps_cmd = f"Start-Process -FilePath '{enable_bat}' -Verb RunAs -Wait"
+            subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], timeout=15)
             time.sleep(1.5)
             subprocess.run(["DisplaySwitch.exe", "/extend"], timeout=3)
             time.sleep(1.0)

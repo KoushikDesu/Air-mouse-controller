@@ -239,6 +239,33 @@ def find_active_stream_socket(manual_ip=None):
 
     return None, None, False
 
+def ensure_extended_display(sct):
+    """Ensure Windows has a Secondary Display (Display 2) active for Win + P Extend mode."""
+    if sct is not None:
+        try:
+            sct._monitors = None
+            if len(sct.monitors) > 2:
+                return True
+        except Exception:
+            pass
+
+    enable_bat = r"C:\Rarey Temp\Ai long stuff\Enable-SecondaryDisplay.bat"
+    if os.path.exists(enable_bat):
+        print("\n[*] Windows Secondary Extended Display (Display 2) is not yet active.")
+        print("[*] Activating Virtual Extended Monitor (Please click 'YES' on Windows prompt)...")
+        try:
+            cmd = f'Start-Process cmd.exe -ArgumentList "/c \\"{enable_bat}\\"" -Verb RunAs -Wait'
+            subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd], timeout=15)
+            time.sleep(1.5)
+            subprocess.run(["DisplaySwitch.exe", "/extend"], timeout=3)
+            time.sleep(1.0)
+            if sct is not None:
+                sct._monitors = None
+                return len(sct.monitors) > 2
+        except Exception as e:
+            print(f"[!] Virtual Display activation notice: {e}")
+    return False
+
 def select_target_monitor(sct):
     """
     Dynamically select appropriate monitor based on Windows Projection (Win + P) modes:
@@ -295,6 +322,15 @@ def main():
             sct = mss.MSS()
         except Exception:
             sct = None
+
+    # Check and ensure Windows Secondary Display is active
+    ensure_extended_display(sct)
+
+    # Ensure Windows is in Extend mode
+    try:
+        subprocess.run(["DisplaySwitch.exe", "/extend"], timeout=2)
+    except Exception:
+        pass
 
     while True:
         attach_desktop()

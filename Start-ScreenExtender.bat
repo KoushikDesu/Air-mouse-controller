@@ -13,6 +13,13 @@ echo.
 set "SCRIPT_DIR=C:\Rarey Temp\Ai long stuff"
 set "SCRIPT_PATH=%SCRIPT_DIR%\AirConnectPro-ScreenExtender.py"
 
+reg query "HKLM\SOFTWARE\MikeTheTech\VirtualDisplayDriver" /v "VDDPATH" >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [*] Configuring native 20:9 ultra-wide display driver...
+    echo [*] Please click 'YES' on the Windows prompt on your screen!
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c `\"`\"%SCRIPT_DIR%\Enable-SecondaryDisplay.bat`\"`\"' -Verb RunAs -Wait"
+)
+
 python -u "%SCRIPT_PATH%" --fps 120 --res 2400x1080 --quality 82
 
 echo.

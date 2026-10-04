@@ -61,14 +61,14 @@ def attach_desktop():
     except Exception:
         pass
 
-def draw_mouse_cursor(bgr, mon_left, mon_top, scale_x=1.0, scale_y=1.0):
+def draw_mouse_cursor(bgr, mon_left, mon_top, scale_x=1.0, scale_y=1.0, offset_x=0, offset_y=0):
     """Draw the system mouse pointer onto the captured frame if present on this display."""
     try:
         ci = CURSORINFO()
         ci.cbSize = ctypes.sizeof(CURSORINFO)
         if ctypes.windll.user32.GetCursorInfo(ctypes.byref(ci)) and (ci.flags & CURSOR_SHOWING):
-            cx = int((ci.ptScreenPos.x - mon_left) * scale_x)
-            cy = int((ci.ptScreenPos.y - mon_top) * scale_y)
+            cx = int((ci.ptScreenPos.x - mon_left) * scale_x) + offset_x
+            cy = int((ci.ptScreenPos.y - mon_top) * scale_y) + offset_y
             h, w = bgr.shape[:2]
             if 0 <= cx < w and 0 <= cy < h:
                 shifted = CURSOR_PTS + [cx, cy]
@@ -133,13 +133,37 @@ def setup_adb_forward(serial):
         try: s.close()
         except Exception: pass
 
+CACHE_FILE = r"C:\Rarey Temp\Ai long stuff\last_known_ip.txt"
+
+def get_last_known_ip():
+    """Retrieve last successfully connected phone IP."""
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r") as f:
+                ip = f.read().strip()
+                if re.match(r"^\d+\.\d+\.\d+\.\d+$", ip):
+                    return ip
+        except Exception:
+            pass
+    return None
+
+def save_last_known_ip(ip):
+    """Save working phone IP to disk for instant 0.01s reconnects."""
+    try:
+        os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
+        with open(CACHE_FILE, "w") as f:
+            f.write(str(ip).strip())
+    except Exception:
+        pass
+
 def get_network_adapters():
     """
     Parse ipconfig /all to detect USB Tethering (RNDIS) adapters and Wi-Fi adapters.
-    Returns: (usb_subnets, wifi_subnets)
+    Returns: (usb_subnets, wifi_subnets, priority_ips)
     """
     usb_subnets = []
     wifi_subnets = []
+    priority_ips = []
     try:
         r = subprocess.run(["ipconfig", "/all"], capture_output=True, text=True, timeout=2)
         current = None
@@ -147,7 +171,7 @@ def get_network_adapters():
             line_str = line.strip()
             if line and not line.startswith(' ') and not line.startswith('\t') and ':' in line:
                 adapter_name = line.split(':')[0].strip().lower()
-                current = {'is_usb': False, 'is_wifi': False, 'prefix': None}
+                current = {'is_usb': False, 'is_wifi': False}
                 if any(k in adapter_name for k in ['wi-fi', 'wireless', 'wlan']):
                     current['is_wifi'] = True
             elif current is not None:
@@ -157,7 +181,15 @@ def get_network_adapters():
                         current['is_usb'] = True
                     elif any(k in desc for k in ['wi-fi', 'wireless', '802.11', 'wlan']):
                         current['is_wifi'] = True
-                elif 'IPv4 Address' in line or 'Default Gateway' in line or 'DHCP Server' in line:
+                elif 'Default Gateway' in line or 'DHCP Server' in line:
+                    for ip in re.findall(r'(\d+\.\d+\.\d+\.\d+)', line):
+                        if not ip.startswith('127.') and not ip.startswith('169.254.') and not ip.endswith('.0') and not ip.endswith('.255'):
+                            if ip not in priority_ips:
+                                if current['is_usb']:
+                                    priority_ips.insert(0, ip)
+                                else:
+                                    priority_ips.append(ip)
+                elif 'IPv4 Address' in line:
                     for ip in re.findall(r'(\d+\.\d+\.\d+\.\d+)', line):
                         if not ip.startswith('127.') and not ip.startswith('169.254.'):
                             prefix = ".".join(ip.split(".")[:3])
@@ -167,7 +199,7 @@ def get_network_adapters():
                                 wifi_subnets.append(prefix)
     except Exception:
         pass
-    return usb_subnets, wifi_subnets
+    return usb_subnets, wifi_subnets, priority_ips
 
 def try_connect_socket(target_ip, port=8080, timeout=0.25):
     """Attempt a quick TCP connection to check if Screen Extender is listening."""
@@ -189,11 +221,10 @@ def try_connect_socket(target_ip, port=8080, timeout=0.25):
             pass
     return None
 
-def scan_subnet_for_phone(prefix, max_threads=16):
-    """Fast concurrent scan of a subnet (e.g. 10.122.172.x) to locate phone port 8080 in < 0.4s."""
-    # Priority IPs first (gateway .1, common tethering leases: .18, .2, .100, .101, .129)
-    priority_last = [1, 18, 2, 100, 101, 102, 105, 129, 3, 4, 5]
-    all_last = priority_last + [i for i in range(1, 40) if i not in priority_last]
+def scan_subnet_for_phone(prefix, max_threads=64):
+    """Fast concurrent scan of an entire subnet (all 1..254 IPs) across 64 threads in < 0.9s."""
+    priority_last = [1, 85, 18, 2, 100, 101, 102, 105, 129, 3, 4, 5, 10, 20, 50]
+    all_last = priority_last + [i for i in range(1, 255) if i not in priority_last]
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
         futures = {executor.submit(try_connect_socket, f"{prefix}.{last}", 8080, 0.25): f"{prefix}.{last}" for last in all_last}
@@ -201,8 +232,8 @@ def scan_subnet_for_phone(prefix, max_threads=16):
             res_sock = future.result()
             if res_sock is not None:
                 ip_found = futures[future]
-                # Close any extra future sockets that might succeed
                 executor.shutdown(wait=False, cancel_futures=True)
+                save_last_known_ip(ip_found)
                 return res_sock, ip_found
     return None, None
 
@@ -212,33 +243,52 @@ def find_active_stream_socket(manual_ip=None):
     1. Check USB via ADB tunnel (127.0.0.1:8080).
     2. Check USB via USB Tethering cable (NDIS adapter subnet - NO DEBUGGING NEEDED).
     3. Check manual IP if passed.
-    4. Fallback to local Wi-Fi subnet.
+    4. Check cached last known IP (Instant reconnect).
+    5. Check priority gateway / DHCP server IPs (hotspot/tethering router).
+    6. Fallback to local Wi-Fi full subnet scan across 64 threads.
     """
     # 1. PRIORITY 1A: Physical USB via ADB (if USB debugging is active)
     usb_adb = get_connected_adb_device()
     if usb_adb:
         setup_adb_forward(usb_adb)
-        sock = try_connect_socket("127.0.0.1", 8080, timeout=0.6)
+        sock = try_connect_socket("127.0.0.1", 8080, timeout=0.5)
         if sock:
             return sock, f"High-Speed USB Cable [ADB Debugging: {usb_adb}]", True
 
     # 2. PRIORITY 1B: Physical USB Cable via USB Tethering (NO USB DEBUGGING NEEDED!)
-    usb_subnets, wifi_subnets = get_network_adapters()
+    usb_subnets, wifi_subnets, priority_ips = get_network_adapters()
     for prefix in usb_subnets:
         sock, found_ip = scan_subnet_for_phone(prefix)
         if sock:
+            save_last_known_ip(found_ip)
             return sock, f"High-Speed USB Cable [USB Tethering: {found_ip}] (426 Mbps)", True
 
     # 3. Manual IP if provided
     if manual_ip:
-        sock = try_connect_socket(manual_ip, 8080, timeout=0.6)
+        sock = try_connect_socket(manual_ip, 8080, timeout=0.5)
         if sock:
+            save_last_known_ip(manual_ip)
             return sock, f"Direct Address [{manual_ip}]", False
 
-    # 4. PRIORITY 2: Wi-Fi (Only if USB is not connected)
+    # 4. Check cached last known IP (Instant 0.01s reconnect!)
+    last_ip = get_last_known_ip()
+    if last_ip:
+        sock = try_connect_socket(last_ip, 8080, timeout=0.35)
+        if sock:
+            return sock, f"Cached Phone Address [{last_ip}]", False
+
+    # 5. Check Gateway and DHCP Server IPs (Instant connect for phone hotspot/tethering!)
+    for ip in priority_ips:
+        sock = try_connect_socket(ip, 8080, timeout=0.35)
+        if sock:
+            save_last_known_ip(ip)
+            return sock, f"Network Direct Gateway [{ip}]", False
+
+    # 6. PRIORITY 2: Wi-Fi subnet scan (all 254 IPs concurrently in < 0.9s)
     for prefix in wifi_subnets:
         sock, found_ip = scan_subnet_for_phone(prefix)
         if sock:
+            save_last_known_ip(found_ip)
             return sock, f"Wi-Fi Wireless LAN [{found_ip}] (Fallback)", False
 
     return None, None, False
@@ -442,19 +492,32 @@ def main():
 
                 raw_h, raw_w = bgr.shape[:2]
 
-                # Match native target resolution (zero-copy when already 1920x1080)
-                if raw_w != target_w or raw_h != target_h:
-                    scale_x = target_w / float(raw_w)
-                    scale_y = target_h / float(raw_h)
-                    bgr_resized = cv2.resize(bgr, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
-                else:
+                # Match native target resolution with aspect ratio preservation (zero distortion / zoom)
+                if raw_w == target_w and raw_h == target_h:
                     scale_x, scale_y = 1.0, 1.0
+                    offset_x, offset_y = 0, 0
                     bgr_resized = bgr
+                else:
+                    scale = min(target_w / float(raw_w), target_h / float(raw_h))
+                    new_w = max(1, int(raw_w * scale))
+                    new_h = max(1, int(raw_h * scale))
+                    bgr_scaled = cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                    if new_w == target_w and new_h == target_h:
+                        bgr_resized = bgr_scaled
+                        scale_x, scale_y = scale, scale
+                        offset_x, offset_y = 0, 0
+                    else:
+                        pad_x = (target_w - new_w) // 2
+                        pad_y = (target_h - new_h) // 2
+                        bgr_resized = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+                        bgr_resized[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = bgr_scaled
+                        scale_x, scale_y = scale, scale
+                        offset_x, offset_y = pad_x, pad_y
 
-                # Draw hardware mouse cursor
+                # Draw hardware mouse cursor with pixel-perfect alignment
                 mon_l = cur_mon.get('left', 0) if isinstance(cur_mon, dict) else 0
                 mon_t = cur_mon.get('top', 0) if isinstance(cur_mon, dict) else 0
-                draw_mouse_cursor(bgr_resized, mon_l, mon_t, scale_x, scale_y)
+                draw_mouse_cursor(bgr_resized, mon_l, mon_t, scale_x, scale_y, offset_x, offset_y)
 
                 # Ultra-fast SIMD JPEG encoding (crisp text, zero blur, no lag)
                 encode_params = [

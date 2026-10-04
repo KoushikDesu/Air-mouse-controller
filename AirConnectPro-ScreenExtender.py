@@ -492,14 +492,9 @@ def main():
 
                 raw_h, raw_w = bgr.shape[:2]
 
-                # Fullscreen edge-to-edge scaling (zero black bars, fills 100% of mobile display)
-                if raw_w == target_w and raw_h == target_h:
-                    scale_x, scale_y = 1.0, 1.0
-                    bgr_resized = bgr
-                else:
-                    scale_x = target_w / float(raw_w)
-                    scale_y = target_h / float(raw_h)
-                    bgr_resized = cv2.resize(bgr, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+                # Native aspect-ratio preservation (NEVER stretch or distort UI/websites)
+                scale_x, scale_y = 1.0, 1.0
+                bgr_resized = bgr
 
                 # Draw hardware mouse cursor with pixel-perfect alignment
                 mon_l = cur_mon.get('left', 0) if isinstance(cur_mon, dict) else 0
@@ -523,7 +518,7 @@ def main():
                     fps = fps_frames / (now - fps_timer)
                     mbps = (len(jpeg_data) * fps * 8) / (1024.0 * 1024.0)
                     priority_badge = "[USB 1st Priority]" if is_usb_active else "[Wi-Fi]"
-                    print(f"\r  {priority_badge} {fps:.1f} FPS | Target: {target_fps} FPS | Res: {target_w}x{target_h} | {mbps:.2f} Mbps   ", end="", flush=True)
+                    print(f"\r  {priority_badge} {fps:.1f} FPS | Target: {target_fps} FPS | Res: {raw_w}x{raw_h} | {mbps:.2f} Mbps   ", end="", flush=True)
                     fps_frames = 0
                     fps_timer = now
 

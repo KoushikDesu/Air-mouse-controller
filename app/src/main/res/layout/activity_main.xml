@@ -567,7 +567,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:contentDescription="Display Surface"
-                android:scaleType="fitXY" />
+                android:scaleType="fitCenter" />
 
             <!-- Standby Overlay / Connection Guide (Only visible when NOT streaming) -->
             <LinearLayout

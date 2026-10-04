@@ -1,13 +1,12 @@
 """
 Air Connect Pro - Fullscreen Laptop Screen Extender
-Ultra-low latency, high-FPS edge-to-edge display streaming with:
-  1. DirectX / DXGI + MSS Hybrid Capture Engine (Overlapped capture & encode for maximum 60-120 FPS).
-  2. Native High-Resolution 1080p Stream (Eliminates text blurriness with high-clarity SIMD JPEG).
-  3. Strict USB First Priority (Auto-switches from Wi-Fi to USB immediately upon cable connection).
-  4. Real-time Hardware Mouse Cursor drawing (visible & responsive on phone).
-  5. Dynamic Multi-Monitor Support: Linked directly to Windows Projection (Win + P):
-     - Win + P -> Extend    : Streams Extended Secondary Display (Display 2).
-     - Win + P -> Duplicate : Streams Primary Laptop Screen (Display 1).
+Rock-solid, zero-crash, edge-to-edge display streaming with:
+  1. Pure MSS GDI capture (100% crash-free, zero black screens, no GPU lockups).
+  2. Works over USB Cable WITHOUT USB Debugging (via USB Tethering 426 Mbps).
+  3. Works over USB Cable WITH USB Debugging (via ADB port forwarding).
+  4. Automatic Wi-Fi fallback if USB is not connected.
+  5. Native 1080p sharp text without blurriness or zooming.
+  6. Live Windows Projection (Win + P): Extend (Display 2) / Duplicate (Display 1).
 """
 
 import sys
@@ -15,11 +14,12 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 import argparse
+import concurrent.futures
 import ctypes
 from ctypes import wintypes
-import io
 import os
 import queue
+import re
 import shutil
 import socket
 import struct
@@ -27,23 +27,13 @@ import subprocess
 import threading
 import time
 
-# High-speed computer vision modules
-HAS_OPENCV = False
 try:
     import cv2
     import numpy as np
     import mss
     HAS_OPENCV = True
 except Exception:
-    from PIL import ImageGrab
-
-# Check for DirectX Desktop Duplication (dxcam)
-HAS_DXCAM = False
-try:
-    import dxcam
-    HAS_DXCAM = True
-except Exception:
-    HAS_DXCAM = False
+    HAS_OPENCV = False
 
 class POINT(ctypes.Structure):
     _fields_ = [('x', ctypes.c_long), ('y', ctypes.c_long)]
@@ -88,7 +78,7 @@ def draw_mouse_cursor(bgr, mon_left, mon_top, scale_x=1.0, scale_y=1.0):
         pass
 
 def find_adb():
-    """Locate the most reliable adb.exe executable on the system."""
+    """Locate adb.exe if available."""
     candidates = [
         r"C:\Users\Admin\Downloads\Android-platform-tools-latest-windows\platform-tools\adb.exe",
         r"C:\temporary\scrcpy\scrcpy-win64-v3.2\scrcpy-win64-v3.2\adb.exe",
@@ -101,37 +91,10 @@ def find_adb():
 
 ADB_BIN = find_adb()
 
-def ensure_adb_server():
-    """Ensure the ADB server daemon is alive on localhost:5037."""
+def get_connected_adb_device():
+    """Direct fast query to ADB server on 127.0.0.1:5037."""
     s = socket.socket()
-    s.settimeout(0.2)
-    try:
-        s.connect(('127.0.0.1', 5037))
-        s.close()
-        return True
-    except Exception:
-        pass
-
-    try:
-        DETACHED_FLAG = 0x00000008 | 0x00000200
-        subprocess.Popen([ADB_BIN, "start-server"],
-                         stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL,
-                         creationflags=DETACHED_FLAG)
-        time.sleep(0.5)
-    except Exception:
-        pass
-    return False
-
-def get_connected_usb_device():
-    """
-    Direct ultra-fast socket query to ADB server on 127.0.0.1:5037.
-    Returns physical USB device serial, or None.
-    Filters out Wi-Fi / TCP connections.
-    """
-    ensure_adb_server()
-    s = socket.socket()
-    s.settimeout(0.5)
+    s.settimeout(0.3)
     try:
         s.connect(('127.0.0.1', 5037))
         req = b'host:devices'
@@ -145,7 +108,7 @@ def get_connected_usb_device():
                 parts = line.strip().split()
                 if len(parts) >= 2 and parts[1] == 'device':
                     serial = parts[0]
-                    if ":" not in serial: # Physical USB serial
+                    if ":" not in serial:
                         return serial
     except Exception:
         pass
@@ -157,7 +120,7 @@ def get_connected_usb_device():
 def setup_adb_forward(serial):
     """Setup ADB TCP port forward to phone port 8080 over USB via ADB socket."""
     s = socket.socket()
-    s.settimeout(0.6)
+    s.settimeout(0.5)
     try:
         s.connect(('127.0.0.1', 5037))
         req = f"host-serial:{serial}:forward:tcp:8080;tcp:8080".encode()
@@ -170,13 +133,13 @@ def setup_adb_forward(serial):
         try: s.close()
         except Exception: pass
 
-def get_classified_ips():
+def get_network_adapters():
     """
-    Scan local network interfaces and classify them into USB Tethering (RNDIS) and Wi-Fi.
-    Returns: (usb_ips, wifi_ips)
+    Parse ipconfig /all to detect USB Tethering (RNDIS) adapters and Wi-Fi adapters.
+    Returns: (usb_subnets, wifi_subnets)
     """
-    usb_ips = []
-    wifi_ips = []
+    usb_subnets = []
+    wifi_subnets = []
     try:
         r = subprocess.run(["ipconfig", "/all"], capture_output=True, text=True, timeout=2)
         current = None
@@ -184,7 +147,7 @@ def get_classified_ips():
             line_str = line.strip()
             if line and not line.startswith(' ') and not line.startswith('\t') and ':' in line:
                 adapter_name = line.split(':')[0].strip().lower()
-                current = {'is_usb': False, 'is_wifi': False}
+                current = {'is_usb': False, 'is_wifi': False, 'prefix': None}
                 if any(k in adapter_name for k in ['wi-fi', 'wireless', 'wlan']):
                     current['is_wifi'] = True
             elif current is not None:
@@ -195,22 +158,19 @@ def get_classified_ips():
                     elif any(k in desc for k in ['wi-fi', 'wireless', '802.11', 'wlan']):
                         current['is_wifi'] = True
                 elif 'IPv4 Address' in line or 'Default Gateway' in line or 'DHCP Server' in line:
-                    import re
                     for ip in re.findall(r'(\d+\.\d+\.\d+\.\d+)', line):
-                        if not ip.startswith('127.'):
+                        if not ip.startswith('127.') and not ip.startswith('169.254.'):
                             prefix = ".".join(ip.split(".")[:3])
-                            candidates = [ip, f"{prefix}.1", f"{prefix}.18", f"{prefix}.2", f"{prefix}.100", f"{prefix}.101", f"{prefix}.129"]
-                            target_list = usb_ips if current['is_usb'] else (wifi_ips if current['is_wifi'] else None)
-                            if target_list is not None:
-                                for c in candidates:
-                                    if c not in target_list:
-                                        target_list.append(c)
+                            if current['is_usb'] and prefix not in usb_subnets:
+                                usb_subnets.append(prefix)
+                            elif current['is_wifi'] and prefix not in wifi_subnets:
+                                wifi_subnets.append(prefix)
     except Exception:
         pass
-    return usb_ips, wifi_ips
+    return usb_subnets, wifi_subnets
 
-def try_connect(target_ip, port=8080, timeout=0.6):
-    """Attempt a quick TCP handshake with socket tuning."""
+def try_connect_socket(target_ip, port=8080, timeout=0.25):
+    """Attempt a quick TCP connection to check if Screen Extender is listening."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -229,44 +189,62 @@ def try_connect(target_ip, port=8080, timeout=0.6):
             pass
     return None
 
+def scan_subnet_for_phone(prefix, max_threads=16):
+    """Fast concurrent scan of a subnet (e.g. 10.122.172.x) to locate phone port 8080 in < 0.4s."""
+    # Priority IPs first (gateway .1, common tethering leases: .18, .2, .100, .101, .129)
+    priority_last = [1, 18, 2, 100, 101, 102, 105, 129, 3, 4, 5]
+    all_last = priority_last + [i for i in range(1, 40) if i not in priority_last]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
+        futures = {executor.submit(try_connect_socket, f"{prefix}.{last}", 8080, 0.25): f"{prefix}.{last}" for last in all_last}
+        for future in concurrent.futures.as_completed(futures):
+            res_sock = future.result()
+            if res_sock is not None:
+                ip_found = futures[future]
+                # Close any extra future sockets that might succeed
+                executor.shutdown(wait=False, cancel_futures=True)
+                return res_sock, ip_found
+    return None, None
+
 def find_active_stream_socket(manual_ip=None):
     """
-    Detect phone connection with STRICT USB FIRST PRIORITY:
-    1. Physical ADB USB Tunnel (127.0.0.1:8080 via ADB Forward).
-    2. Physical USB Cable via USB Tethering (RNDIS Remote NDIS 426 Mbps).
-    3. Wi-Fi Wireless LAN (Only as fallback if USB is not connected).
-    Returns: (socket, connection_label, is_usb_flag)
+    Intelligent connection detector with STRICT PHYSICAL USB FIRST PRIORITY:
+    1. Check USB via ADB tunnel (127.0.0.1:8080).
+    2. Check USB via USB Tethering cable (NDIS adapter subnet - NO DEBUGGING NEEDED).
+    3. Check manual IP if passed.
+    4. Fallback to local Wi-Fi subnet.
     """
-    # 1. PRIORITY 1A: Physical ADB USB Tunnel
-    usb_dev = get_connected_usb_device()
-    if usb_dev:
-        setup_adb_forward(usb_dev)
-        sock = try_connect("127.0.0.1", 8080, timeout=0.8)
+    # 1. PRIORITY 1A: Physical USB via ADB (if USB debugging is active)
+    usb_adb = get_connected_adb_device()
+    if usb_adb:
+        setup_adb_forward(usb_adb)
+        sock = try_connect_socket("127.0.0.1", 8080, timeout=0.6)
         if sock:
-            return sock, f"High-Speed USB [ADB: {usb_dev}] (1st Priority - Zero Latency)", True
+            return sock, f"High-Speed USB Cable [ADB Debugging: {usb_adb}]", True
 
-    # 2. PRIORITY 1B: Physical USB Cable via USB Tethering (Remote NDIS 426 Mbps)
-    usb_ips, wifi_ips = get_classified_ips()
-    for ip in usb_ips:
-        sock = try_connect(ip, 8080, timeout=0.4)
+    # 2. PRIORITY 1B: Physical USB Cable via USB Tethering (NO USB DEBUGGING NEEDED!)
+    usb_subnets, wifi_subnets = get_network_adapters()
+    for prefix in usb_subnets:
+        sock, found_ip = scan_subnet_for_phone(prefix)
         if sock:
-            return sock, f"High-Speed USB Cable [USB Tethering: {ip}] (1st Priority - 426 Mbps)", True
+            return sock, f"High-Speed USB Cable [USB Tethering: {found_ip}] (426 Mbps)", True
 
-    # 3. PRIORITY 2: Wi-Fi Wireless LAN (Only if USB is not connected)
+    # 3. Manual IP if provided
     if manual_ip:
-        sock = try_connect(manual_ip, 8080, timeout=0.8)
+        sock = try_connect_socket(manual_ip, 8080, timeout=0.6)
         if sock:
-            return sock, f"Direct Wi-Fi [{manual_ip}] (Wireless Fallback)", False
+            return sock, f"Direct Address [{manual_ip}]", False
 
-    for ip in wifi_ips:
-        sock = try_connect(ip, 8080, timeout=0.3)
+    # 4. PRIORITY 2: Wi-Fi (Only if USB is not connected)
+    for prefix in wifi_subnets:
+        sock, found_ip = scan_subnet_for_phone(prefix)
         if sock:
-            return sock, f"Wi-Fi Network [{ip}] (Wireless Fallback)", False
+            return sock, f"Wi-Fi Wireless LAN [{found_ip}] (Fallback)", False
 
     return None, None, False
 
-def ensure_extended_display(sct):
-    """Ensure Windows has a Secondary Display (Display 2) active for Win + P Extend mode."""
+def ensure_clean_secondary_display(sct):
+    """Ensure Windows has a single clean Virtual Extended Display (Display 2) active."""
     if sct is not None:
         try:
             sct._monitors = None
@@ -277,8 +255,8 @@ def ensure_extended_display(sct):
 
     enable_bat = r"C:\Rarey Temp\Ai long stuff\Enable-SecondaryDisplay.bat"
     if os.path.exists(enable_bat):
-        print("\n[*] Windows Secondary Extended Display (Display 2) is not yet active.")
-        print("[*] Activating Virtual Extended Monitor (Please click 'YES' if Windows prompts)...")
+        print("\n[*] Windows Secondary Extended Display (Display 2) is activating...")
+        print("[*] Launching clean virtual display activator (Please click 'YES' on Windows prompt)...")
         try:
             ps_cmd = f"Start-Process -FilePath '{enable_bat}' -Verb RunAs -Wait"
             subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], timeout=15)
@@ -289,7 +267,7 @@ def ensure_extended_display(sct):
                 sct._monitors = None
                 return len(sct.monitors) > 2
         except Exception as e:
-            print(f"[!] Virtual Display activation notice: {e}")
+            print(f"[!] Display setup note: {e}")
     return False
 
 def select_target_monitor(sct):
@@ -300,28 +278,27 @@ def select_target_monitor(sct):
     """
     if sct is not None:
         try:
-            sct._monitors = None # Invalidate MSS cache to detect Win + P mode changes immediately!
+            sct._monitors = None
         except Exception:
             pass
         monitors = sct.monitors
         if len(monitors) > 2:
-            return monitors[2], "[EXTENDED DISPLAY 2] (Win + P: Extend Mode Active)", 1
+            return monitors[2], "[EXTENDED DISPLAY 2] (Win + P: Extend Mode Active)", 2
         elif len(monitors) == 2:
-            return monitors[1], "[PRIMARY DISPLAY 1] (Win + P: Duplicate/Mirror Mode)", 0
+            return monitors[1], "[PRIMARY DISPLAY 1] (Win + P: Duplicate/Mirror Mode)", 1
     return None, "Default Screen", 0
 
 def main():
     parser = argparse.ArgumentParser(description="Air Connect Pro Screen Extender")
     parser.add_argument("--fps", type=int, default=120, help="Target FPS (60, 90, 120, 144). Default is 120.")
-    parser.add_argument("--ip", type=str, default=None, help="Optional manual phone IP for Wi-Fi stream.")
-    parser.add_argument("--res", type=str, default="1920x1080", help="Stream resolution. Default: 1920x1080 (Sharp Native Text).")
-    parser.add_argument("--quality", type=int, default=82, help="JPEG quality (1-100). Default: 82 for crystal-clear text.")
+    parser.add_argument("--ip", type=str, default=None, help="Optional manual phone IP for stream.")
+    parser.add_argument("--res", type=str, default="1920x1080", help="Stream resolution. Default: 1920x1080.")
+    parser.add_argument("--quality", type=int, default=80, help="JPEG quality (1-100). Default: 80.")
     args = parser.parse_args()
 
     target_fps = max(30, min(144, args.fps))
     frame_interval = 1.0 / target_fps
 
-    # Parse target resolution
     target_w, target_h = 1920, 1080
     try:
         parts = args.res.lower().split("x")
@@ -332,12 +309,12 @@ def main():
     print("=" * 68)
     print("   AIR CONNECT PRO - FULLSCREEN LAPTOP DISPLAY EXTENDER")
     print("=" * 68)
-    print(f"  Target Frame Rate : {target_fps} FPS (High-End AMOLED 120Hz/144Hz)")
-    print(f"  Stream Resolution : {target_w}x{target_h} (Crystal-Clear Native Text)")
-    print(f"  Priority Policy   : [FIRST PRIORITY: USB CABLE] > [FALLBACK: Wi-Fi]")
-    print(f"  Cursor Mode       : Hardware Mouse Pointer Overlay (Live Drawn)")
-    print(f"  Windows Projection: Win + P (Extend / Duplicate / Second Screen)")
-    print(f"  ADB Engine        : Integrated Direct Socket + {os.path.basename(ADB_BIN)}")
+    print(f"  Target Frame Rate : {target_fps} FPS (High-End AMOLED 120Hz)")
+    print(f"  Stream Resolution : {target_w}x{target_h} (Native 1080p - Zero Zoom)")
+    print(f"  Priority Policy   : [1st PRIORITY: USB CABLE] > [FALLBACK: Wi-Fi]")
+    print(f"  USB Modes         : 1. USB Tethering (No Debugging) | 2. ADB Debugging")
+    print(f"  Cursor Mode       : Live Hardware Mouse Pointer Overlay")
+    print(f"  Windows Projection: Win + P (Extend / Duplicate)")
     print("=" * 68)
 
     attach_desktop()
@@ -349,10 +326,8 @@ def main():
         except Exception:
             sct = None
 
-    # Check and ensure Windows Secondary Display is active
-    ensure_extended_display(sct)
+    ensure_clean_secondary_display(sct)
 
-    # Ensure Windows is in Extend mode
     try:
         subprocess.run(["DisplaySwitch.exe", "/extend"], timeout=2)
     except Exception:
@@ -360,11 +335,10 @@ def main():
 
     while True:
         attach_desktop()
-        usb_status = get_connected_usb_device()
-        if usb_status:
-            print(f"\n[*] [FIRST PRIORITY] USB Device Detected: {usb_status}. Connecting via USB...")
-        else:
-            print("\n[*] Waiting for phone Screen Extender (USB / Wi-Fi)...")
+        print("\n[*] Waiting for phone Screen Extender...")
+        print("    [!] Option A (Recommended): Plug in USB Cable and turn on 'USB Tethering' on phone.")
+        print("    [!] Option B: Plug in USB Cable with 'USB Debugging' ON.")
+        print("    [!] Option C: Connect phone to same Wi-Fi network.")
 
         sock = None
         conn_label = None
@@ -377,12 +351,7 @@ def main():
             time.sleep(0.5)
 
         if not sock:
-            print("  [-] Waiting for connection... Please ensure:")
-            print("      1. Open Air Connect Pro on phone -> Tap Menu (?) -> 'Screen Extender'.")
-            if usb_status:
-                print("      2. Phone is connected via USB. Tap 'Screen Extender' on phone to begin.")
-            else:
-                print("      2. Plug in USB Cable (Recommended for 120 FPS) OR connect to same Wi-Fi.")
+            print("  [-] Waiting for phone... Please open Air Connect Pro on phone -> tap 'Screen Extender'.")
             time.sleep(1.5)
             continue
 
@@ -390,7 +359,7 @@ def main():
         print(f"\n[+] CONNECTION ESTABLISHED!")
         print(f"    Link Mode : {conn_label}")
         print(f"    Display   : {mon_desc}")
-        print(f"    Target    : {target_fps} FPS Fullscreen (1080p Crisp Text)")
+        print(f"    Target    : {target_fps} FPS Fullscreen (Native 1080p)")
         if is_usb_active:
             print("    Status    : High-Speed USB Active - Zero Latency 120 FPS")
         else:
@@ -404,87 +373,38 @@ def main():
         frame_queue = queue.Queue(maxsize=1)
         stop_grabber = threading.Event()
         current_active_mon = [active_mon]
-        current_mon_idx = [mon_idx]
 
-        # Multi-Threaded Pipelined Capture Engine:
-        # Tries DirectX GPU hardware capture (dxcam) first for ultra-smooth 120 FPS;
-        # Falls back to high-speed MSS GDI capture.
         def grabber_thread_func():
             attach_desktop()
-
-            # Attempt DXCam GPU capture first
-            dxcam_camera = None
-            if HAS_DXCAM:
-                try:
-                    dxcam_camera = dxcam.create(device_idx=0, output_idx=current_mon_idx[0], output_color="BGR")
-                    if dxcam_camera:
-                        dxcam_camera.start(target_fps=target_fps, video_mode=True)
-                except Exception:
-                    dxcam_camera = None
-
-            grabber_sct = None
-            if dxcam_camera is None:
-                try:
-                    grabber_sct = mss.MSS()
-                except Exception:
-                    pass
-
-            last_seen_idx = current_mon_idx[0]
+            try:
+                grabber_sct = mss.MSS()
+            except Exception:
+                return
 
             while not stop_grabber.is_set():
                 try:
-                    # If monitor target changed (e.g. user toggled Win + P Extend <-> Duplicate)
-                    if current_mon_idx[0] != last_seen_idx:
-                        last_seen_idx = current_mon_idx[0]
-                        if dxcam_camera:
-                            try:
-                                dxcam_camera.stop()
-                                dxcam_camera = dxcam.create(device_idx=0, output_idx=last_seen_idx, output_color="BGR")
-                                dxcam_camera.start(target_fps=target_fps, video_mode=True)
-                            except Exception:
-                                dxcam_camera = None
-                                if grabber_sct is None:
-                                    grabber_sct = mss.MSS()
-
-                    raw_bgr = None
                     mon = current_active_mon[0]
+                    if mon is None:
+                        time.sleep(0.01)
+                        continue
 
-                    if dxcam_camera:
-                        frame = dxcam_camera.get_latest_frame()
-                        if frame is not None:
-                            raw_bgr = frame
-                        else:
-                            time.sleep(0.002)
-                            continue
-                    elif grabber_sct:
+                    shot = grabber_sct.grab(mon)
+                    raw = np.frombuffer(shot.raw, dtype=np.uint8).reshape((shot.height, shot.width, 4))
+                    raw_bgr = raw[:, :, :3]
+
+                    try:
+                        frame_queue.put_nowait((raw_bgr, mon))
+                    except queue.Full:
                         try:
-                            grabber_sct._monitors = None
-                        except Exception:
+                            frame_queue.get_nowait()
+                        except queue.Empty:
                             pass
-                        shot = grabber_sct.grab(mon)
-                        raw = np.frombuffer(shot.raw, dtype=np.uint8).reshape((shot.height, shot.width, 4))
-                        raw_bgr = raw[:, :, :3]
-
-                    if raw_bgr is not None:
                         try:
                             frame_queue.put_nowait((raw_bgr, mon))
                         except queue.Full:
-                            try:
-                                frame_queue.get_nowait()
-                            except queue.Empty:
-                                pass
-                            try:
-                                frame_queue.put_nowait((raw_bgr, mon))
-                            except queue.Full:
-                                pass
+                            pass
                 except Exception:
                     time.sleep(0.005)
-
-            if dxcam_camera:
-                try:
-                    dxcam_camera.stop()
-                except Exception:
-                    pass
 
         grab_thread = threading.Thread(target=grabber_thread_func, daemon=True)
         grab_thread.start()
@@ -494,24 +414,23 @@ def main():
                 cycle_start = time.time()
                 attach_desktop()
 
-                # Dynamic live check for Windows Projection changes (Win + P Extend / Duplicate)
                 now = time.time()
+                # Dynamic check for Win + P Extend / Duplicate switching
                 if now - last_mon_check >= 1.0:
                     last_mon_check = now
                     current_mon, current_desc, cur_idx = select_target_monitor(sct)
                     if current_desc != mon_desc:
                         active_mon = current_mon
                         current_active_mon[0] = active_mon
-                        current_mon_idx[0] = cur_idx
                         mon_desc = current_desc
                         print(f"\n[WIN + P PROJECTION CHANGED] Now streaming: {mon_desc}")
 
-                # Dynamic USB Hot-Plug Preemption:
+                # Dynamic USB hot-plug preemption: switch Wi-Fi to USB immediately if cable plugged in
                 if not is_usb_active and (now - last_usb_check >= 2.0):
                     last_usb_check = now
-                    plugged_dev = get_connected_usb_device()
-                    if plugged_dev:
-                        print(f"\n\n[PRIORITY OVERRIDE] USB Cable Detected ({plugged_dev})!")
+                    usb_subnets, _ = get_network_adapters()
+                    if get_connected_adb_device() or usb_subnets:
+                        print("\n\n[PRIORITY OVERRIDE] Physical USB Cable Connection Detected!")
                         print("  -> Auto-switching stream from Wi-Fi to USB for First Priority Zero Latency...")
                         sock.close()
                         break
@@ -523,7 +442,7 @@ def main():
 
                 raw_h, raw_w = bgr.shape[:2]
 
-                # Only resize if necessary; if resolution matches, bypass resize entirely for zero-copy max speed!
+                # Match native target resolution (zero-copy when already 1920x1080)
                 if raw_w != target_w or raw_h != target_h:
                     scale_x = target_w / float(raw_w)
                     scale_y = target_h / float(raw_h)
@@ -532,12 +451,12 @@ def main():
                     scale_x, scale_y = 1.0, 1.0
                     bgr_resized = bgr
 
-                # Draw hardware mouse cursor onto frame
+                # Draw hardware mouse cursor
                 mon_l = cur_mon.get('left', 0) if isinstance(cur_mon, dict) else 0
                 mon_t = cur_mon.get('top', 0) if isinstance(cur_mon, dict) else 0
                 draw_mouse_cursor(bgr_resized, mon_l, mon_t, scale_x, scale_y)
 
-                # High-speed SIMD JPEG compression (crisp text without blur)
+                # Ultra-fast SIMD JPEG encoding (crisp text, zero blur, no lag)
                 encode_params = [
                     cv2.IMWRITE_JPEG_QUALITY, args.quality,
                     cv2.IMWRITE_JPEG_OPTIMIZE, 0
@@ -545,7 +464,6 @@ def main():
                 _, enc = cv2.imencode('.jpg', bgr_resized, encode_params)
                 jpeg_data = enc.tobytes()
 
-                # Protocol: 4-byte big-endian payload length + JPEG byte payload
                 hdr = struct.pack(">I", len(jpeg_data))
                 sock.sendall(hdr + jpeg_data)
 

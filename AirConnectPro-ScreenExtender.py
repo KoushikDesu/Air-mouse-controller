@@ -478,7 +478,7 @@ def main():
                 # Dynamic USB hot-plug preemption: switch Wi-Fi to USB immediately if cable plugged in
                 if not is_usb_active and (now - last_usb_check >= 2.0):
                     last_usb_check = now
-                    usb_subnets, _ = get_network_adapters()
+                    usb_subnets, _, _ = get_network_adapters()
                     if get_connected_adb_device() or usb_subnets:
                         print("\n\n[PRIORITY OVERRIDE] Physical USB Cable Connection Detected!")
                         print("  -> Auto-switching stream from Wi-Fi to USB for First Priority Zero Latency...")

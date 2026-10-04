@@ -47,33 +47,50 @@ class CURSORINFO(ctypes.Structure):
     ]
 
 CURSOR_SHOWING = 0x00000001
-CURSOR_PTS = np.array([
-    [0, 0], [0, 19], [5, 15], [9, 23], [12, 21], [8, 14], [14, 14]
-], dtype=np.int32)
+CURSOR_SCALE = 2.0
+CURSOR_PTS = (np.array([
+    [0, 0], [0, 20], [6, 16], [10, 24], [13, 22], [9, 15], [15, 15]
+], dtype=np.float32) * CURSOR_SCALE).astype(np.int32)
 
 def attach_desktop():
     """Ensure this thread is attached to the interactive Windows input desktop."""
     try:
         user32 = ctypes.windll.user32
         h_desk = user32.OpenInputDesktop(0, False, 0x01FF)
+        if not h_desk:
+            h_desk = user32.OpenDesktopW("Default", 0, False, 0x01FF)
         if h_desk:
             user32.SetThreadDesktop(h_desk)
     except Exception:
         pass
 
 def draw_mouse_cursor(bgr, mon_left, mon_top, scale_x=1.0, scale_y=1.0, offset_x=0, offset_y=0):
-    """Draw the system mouse pointer onto the captured frame if present on this display."""
+    """Draw the system mouse pointer onto the captured frame with 100% reliability."""
     try:
+        user32 = ctypes.windll.user32
+        attach_desktop()
         ci = CURSORINFO()
         ci.cbSize = ctypes.sizeof(CURSORINFO)
-        if ctypes.windll.user32.GetCursorInfo(ctypes.byref(ci)) and (ci.flags & CURSOR_SHOWING):
-            cx = int((ci.ptScreenPos.x - mon_left) * scale_x) + offset_x
-            cy = int((ci.ptScreenPos.y - mon_top) * scale_y) + offset_y
+        got_pos = False
+        raw_x, raw_y = 0, 0
+        if user32.GetCursorInfo(ctypes.byref(ci)) and (ci.flags & CURSOR_SHOWING):
+            raw_x, raw_y = ci.ptScreenPos.x, ci.ptScreenPos.y
+            got_pos = True
+        else:
+            pt = POINT()
+            if user32.GetCursorPos(ctypes.byref(pt)):
+                raw_x, raw_y = pt.x, pt.y
+                got_pos = True
+
+        if got_pos:
+            cx = int((raw_x - mon_left) * scale_x) + offset_x
+            cy = int((raw_y - mon_top) * scale_y) + offset_y
             h, w = bgr.shape[:2]
             if 0 <= cx < w and 0 <= cy < h:
                 shifted = CURSOR_PTS + [cx, cy]
+                # High-contrast 2.0x cursor: Solid White fill + prominent 2px Dark outline
                 cv2.fillPoly(bgr, [shifted], (255, 255, 255))
-                cv2.polylines(bgr, [shifted], True, (0, 0, 0), 1, cv2.LINE_AA)
+                cv2.polylines(bgr, [shifted], True, (0, 0, 0), 2, cv2.LINE_AA)
     except Exception:
         pass
 

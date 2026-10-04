@@ -1,11 +1,13 @@
 """
 Air Connect Pro - Fullscreen Laptop Screen Extender
 Ultra-low latency, high-FPS edge-to-edge display streaming with:
-  1. Multi-threaded Pipelined Grab + Stream Engine (Overlapped capture & encode for maximum 60-120 FPS).
-  2. Strict USB First Priority (Auto-switches from Wi-Fi to USB immediately upon cable connection).
-  3. Real-time Hardware Mouse Cursor drawing (visible & responsive on phone).
-  4. Dynamic Multi-Monitor Support (Supports Win + P -> Extend / Duplicate / Second Screen Only).
-  5. Fast SIMD JPEG compression with zero queue lag.
+  1. DirectX / DXGI + MSS Hybrid Capture Engine (Overlapped capture & encode for maximum 60-120 FPS).
+  2. Native High-Resolution 1080p Stream (Eliminates text blurriness with high-clarity SIMD JPEG).
+  3. Strict USB First Priority (Auto-switches from Wi-Fi to USB immediately upon cable connection).
+  4. Real-time Hardware Mouse Cursor drawing (visible & responsive on phone).
+  5. Dynamic Multi-Monitor Support: Linked directly to Windows Projection (Win + P):
+     - Win + P -> Extend    : Streams Extended Secondary Display (Display 2).
+     - Win + P -> Duplicate : Streams Primary Laptop Screen (Display 1).
 """
 
 import sys
@@ -25,7 +27,7 @@ import subprocess
 import threading
 import time
 
-# Try importing high-speed computer vision modules
+# High-speed computer vision modules
 HAS_OPENCV = False
 try:
     import cv2
@@ -34,6 +36,14 @@ try:
     HAS_OPENCV = True
 except Exception:
     from PIL import ImageGrab
+
+# Check for DirectX Desktop Duplication (dxcam)
+HAS_DXCAM = False
+try:
+    import dxcam
+    HAS_DXCAM = True
+except Exception:
+    HAS_DXCAM = False
 
 class POINT(ctypes.Structure):
     _fields_ = [('x', ctypes.c_long), ('y', ctypes.c_long)]
@@ -231,39 +241,46 @@ def find_active_stream_socket(manual_ip=None):
 
 def select_target_monitor(sct):
     """
-    Select appropriate monitor for Windows Projection modes:
-    - Multiple monitors (Extend mode): Captures Display 2 (the extended virtual display)
-    - Single/Duplicate: Captures Display 1
+    Dynamically select appropriate monitor based on Windows Projection (Win + P) modes:
+    - Multiple monitors (Extend mode active): Captures Display 2 (the extended phone monitor)
+    - Single/Duplicate mode: Captures Display 1 (the primary laptop screen)
     """
-    if len(sct.monitors) > 2:
-        return sct.monitors[2], "🖥️ EXTENDED SECONDARY SCREEN (Display 2)"
-    else:
-        return sct.monitors[1], "🖥️ PRIMARY / DUPLICATE SCREEN (Display 1)"
+    if sct is not None:
+        try:
+            sct._monitors = None # Invalidate MSS cache to detect Win + P mode changes immediately!
+        except Exception:
+            pass
+        monitors = sct.monitors
+        if len(monitors) > 2:
+            return monitors[2], "[EXTENDED DISPLAY 2] (Win + P: Extend Mode Active)", 1
+        elif len(monitors) == 2:
+            return monitors[1], "[PRIMARY DISPLAY 1] (Win + P: Duplicate/Mirror Mode)", 0
+    return None, "Default Screen", 0
 
 def main():
     parser = argparse.ArgumentParser(description="Air Connect Pro Screen Extender")
     parser.add_argument("--fps", type=int, default=120, help="Target FPS (60, 90, 120, 144). Default is 120.")
     parser.add_argument("--ip", type=str, default=None, help="Optional manual phone IP for Wi-Fi stream.")
-    parser.add_argument("--res", type=str, default="1600x900", help="Stream resolution (e.g. '1600x900', '1280x720', '1920x1080'). Default: 1600x900 for high FPS.")
-    parser.add_argument("--quality", type=int, default=72, help="JPEG quality (1-100). Default: 72.")
+    parser.add_argument("--res", type=str, default="1920x1080", help="Stream resolution. Default: 1920x1080 (Sharp Native Text).")
+    parser.add_argument("--quality", type=int, default=82, help="JPEG quality (1-100). Default: 82 for crystal-clear text.")
     args = parser.parse_args()
 
     target_fps = max(30, min(144, args.fps))
     frame_interval = 1.0 / target_fps
 
     # Parse target resolution
-    target_w, target_h = 1600, 900
+    target_w, target_h = 1920, 1080
     try:
         parts = args.res.lower().split("x")
         target_w, target_h = int(parts[0]), int(parts[1])
     except Exception:
-        target_w, target_h = 1600, 900
+        target_w, target_h = 1920, 1080
 
     print("=" * 68)
     print("   AIR CONNECT PRO - FULLSCREEN LAPTOP DISPLAY EXTENDER")
     print("=" * 68)
     print(f"  Target Frame Rate : {target_fps} FPS (High-End AMOLED 120Hz/144Hz)")
-    print(f"  Stream Resolution : {target_w}x{target_h} (Optimized for High FPS)")
+    print(f"  Stream Resolution : {target_w}x{target_h} (Crystal-Clear Native Text)")
     print(f"  Priority Policy   : [FIRST PRIORITY: USB CABLE] > [FALLBACK: Wi-Fi]")
     print(f"  Cursor Mode       : Hardware Mouse Pointer Overlay (Live Drawn)")
     print(f"  Windows Projection: Win + P (Extend / Duplicate / Second Screen)")
@@ -299,7 +316,7 @@ def main():
 
         if not sock:
             print("  [-] Waiting for connection... Please ensure:")
-            print("      1. Open Air Connect Pro on phone -> Tap Menu (☰) -> 'Screen Extender'.")
+            print("      1. Open Air Connect Pro on phone -> Tap Menu (?) -> 'Screen Extender'.")
             if usb_status:
                 print("      2. Phone is connected via USB. Tap 'Screen Extender' on phone to begin.")
             else:
@@ -307,50 +324,105 @@ def main():
             time.sleep(1.5)
             continue
 
-        active_mon, mon_desc = select_target_monitor(sct)
+        active_mon, mon_desc, mon_idx = select_target_monitor(sct)
         print(f"\n[+] CONNECTION ESTABLISHED!")
         print(f"    Link Mode : {conn_label}")
         print(f"    Display   : {mon_desc}")
-        print(f"    Target    : {target_fps} FPS Fullscreen")
+        print(f"    Target    : {target_fps} FPS Fullscreen (1080p Crisp Text)")
         if is_usb_active:
-            print("    Status    : ⚡ First Priority USB Active - Maximum 120 FPS Zero Latency")
+            print("    Status    : High-Speed USB Active - Zero Latency 120 FPS")
         else:
-            print("    Status    : 🟡 Streaming over Wi-Fi (Plug in USB anytime to auto-switch to USB!)")
+            print("    Status    : Streaming over Wi-Fi (Plug in USB anytime to auto-switch to USB!)")
 
         fps_timer = time.time()
         fps_frames = 0
         last_usb_check = time.time()
         last_mon_check = time.time()
 
-        # Multi-Threaded Pipelined Producer-Consumer Architecture:
-        # Thread 1: Grabber continuously captures latest monitor frame without stalling.
-        # Thread 2: Main loop encodes and sends via TCP.
         frame_queue = queue.Queue(maxsize=1)
         stop_grabber = threading.Event()
         current_active_mon = [active_mon]
+        current_mon_idx = [mon_idx]
 
+        # Multi-Threaded Pipelined Capture Engine:
+        # Tries DirectX GPU hardware capture (dxcam) first for ultra-smooth 120 FPS;
+        # Falls back to high-speed MSS GDI capture.
         def grabber_thread_func():
             attach_desktop()
-            grabber_sct = mss.MSS()
+
+            # Attempt DXCam GPU capture first
+            dxcam_camera = None
+            if HAS_DXCAM:
+                try:
+                    dxcam_camera = dxcam.create(device_idx=0, output_idx=current_mon_idx[0], output_color="BGR")
+                    if dxcam_camera:
+                        dxcam_camera.start(target_fps=target_fps, video_mode=True)
+                except Exception:
+                    dxcam_camera = None
+
+            grabber_sct = None
+            if dxcam_camera is None:
+                try:
+                    grabber_sct = mss.MSS()
+                except Exception:
+                    pass
+
+            last_seen_idx = current_mon_idx[0]
+
             while not stop_grabber.is_set():
                 try:
+                    # If monitor target changed (e.g. user toggled Win + P Extend <-> Duplicate)
+                    if current_mon_idx[0] != last_seen_idx:
+                        last_seen_idx = current_mon_idx[0]
+                        if dxcam_camera:
+                            try:
+                                dxcam_camera.stop()
+                                dxcam_camera = dxcam.create(device_idx=0, output_idx=last_seen_idx, output_color="BGR")
+                                dxcam_camera.start(target_fps=target_fps, video_mode=True)
+                            except Exception:
+                                dxcam_camera = None
+                                if grabber_sct is None:
+                                    grabber_sct = mss.MSS()
+
+                    raw_bgr = None
                     mon = current_active_mon[0]
-                    shot = grabber_sct.grab(mon)
-                    raw = np.frombuffer(shot.raw, dtype=np.uint8).reshape((shot.height, shot.width, 4))
-                    # Atomic update of latest frame
-                    try:
-                        frame_queue.put_nowait((raw, mon))
-                    except queue.Full:
+
+                    if dxcam_camera:
+                        frame = dxcam_camera.get_latest_frame()
+                        if frame is not None:
+                            raw_bgr = frame
+                        else:
+                            time.sleep(0.002)
+                            continue
+                    elif grabber_sct:
                         try:
-                            frame_queue.get_nowait()
-                        except queue.Empty:
+                            grabber_sct._monitors = None
+                        except Exception:
                             pass
+                        shot = grabber_sct.grab(mon)
+                        raw = np.frombuffer(shot.raw, dtype=np.uint8).reshape((shot.height, shot.width, 4))
+                        raw_bgr = raw[:, :, :3]
+
+                    if raw_bgr is not None:
                         try:
-                            frame_queue.put_nowait((raw, mon))
+                            frame_queue.put_nowait((raw_bgr, mon))
                         except queue.Full:
-                            pass
+                            try:
+                                frame_queue.get_nowait()
+                            except queue.Empty:
+                                pass
+                            try:
+                                frame_queue.put_nowait((raw_bgr, mon))
+                            except queue.Full:
+                                pass
                 except Exception:
-                    time.sleep(0.01)
+                    time.sleep(0.005)
+
+            if dxcam_camera:
+                try:
+                    dxcam_camera.stop()
+                except Exception:
+                    pass
 
         grab_thread = threading.Thread(target=grabber_thread_func, daemon=True)
         grab_thread.start()
@@ -360,47 +432,50 @@ def main():
                 cycle_start = time.time()
                 attach_desktop()
 
-                # Dynamic check for monitor changes (e.g. user toggles Win + P Extend/Duplicate)
+                # Dynamic live check for Windows Projection changes (Win + P Extend / Duplicate)
                 now = time.time()
-                if now - last_mon_check >= 1.5:
+                if now - last_mon_check >= 1.0:
                     last_mon_check = now
-                    current_mon, current_desc = select_target_monitor(sct)
+                    current_mon, current_desc, cur_idx = select_target_monitor(sct)
                     if current_desc != mon_desc:
                         active_mon = current_mon
                         current_active_mon[0] = active_mon
+                        current_mon_idx[0] = cur_idx
                         mon_desc = current_desc
-                        print(f"\n[DISPLAY CHANGED] Now streaming: {mon_desc}")
+                        print(f"\n[WIN + P PROJECTION CHANGED] Now streaming: {mon_desc}")
 
                 # Dynamic USB Hot-Plug Preemption:
                 if not is_usb_active and (now - last_usb_check >= 2.0):
                     last_usb_check = now
                     plugged_dev = get_connected_usb_device()
                     if plugged_dev:
-                        print(f"\n\n[⚡ PRIORITY OVERRIDE] USB Cable Detected ({plugged_dev})!")
+                        print(f"\n\n[PRIORITY OVERRIDE] USB Cable Detected ({plugged_dev})!")
                         print("  -> Auto-switching stream from Wi-Fi to USB for First Priority Zero Latency...")
                         sock.close()
                         break
 
                 try:
-                    raw, cur_mon = frame_queue.get(timeout=0.08)
+                    bgr, cur_mon = frame_queue.get(timeout=0.08)
                 except queue.Empty:
                     continue
 
-                bgr = raw[:, :, :3]
                 raw_h, raw_w = bgr.shape[:2]
 
+                # Only resize if necessary; if resolution matches, bypass resize entirely for zero-copy max speed!
                 if raw_w != target_w or raw_h != target_h:
                     scale_x = target_w / float(raw_w)
                     scale_y = target_h / float(raw_h)
                     bgr_resized = cv2.resize(bgr, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
                 else:
                     scale_x, scale_y = 1.0, 1.0
-                    bgr_resized = bgr.copy()
+                    bgr_resized = bgr
 
                 # Draw hardware mouse cursor onto frame
-                draw_mouse_cursor(bgr_resized, cur_mon['left'], cur_mon['top'], scale_x, scale_y)
+                mon_l = cur_mon.get('left', 0) if isinstance(cur_mon, dict) else 0
+                mon_t = cur_mon.get('top', 0) if isinstance(cur_mon, dict) else 0
+                draw_mouse_cursor(bgr_resized, mon_l, mon_t, scale_x, scale_y)
 
-                # Fast SIMD JPEG compression (no huffman optimize pass for speed)
+                # High-speed SIMD JPEG compression (crisp text without blur)
                 encode_params = [
                     cv2.IMWRITE_JPEG_QUALITY, args.quality,
                     cv2.IMWRITE_JPEG_OPTIMIZE, 0
@@ -417,7 +492,7 @@ def main():
                 if now - fps_timer >= 1.0:
                     fps = fps_frames / (now - fps_timer)
                     mbps = (len(jpeg_data) * fps * 8) / (1024.0 * 1024.0)
-                    priority_badge = "[USB ⚡ 1st Priority]" if is_usb_active else "[Wi-Fi 🟡]"
+                    priority_badge = "[USB 1st Priority]" if is_usb_active else "[Wi-Fi]"
                     print(f"\r  {priority_badge} {fps:.1f} FPS | Target: {target_fps} FPS | Res: {target_w}x{target_h} | {mbps:.2f} Mbps   ", end="", flush=True)
                     fps_frames = 0
                     fps_timer = now

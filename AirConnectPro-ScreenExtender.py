@@ -1,8 +1,10 @@
 """
 Air Connect Pro - Fullscreen Laptop Screen Extender
-Ultra-low latency, high-FPS edge-to-edge display streaming with Strict USB First Priority.
-If both USB and Wi-Fi are connected, USB is ALWAYS selected first.
-Supports dynamic USB hot-plug preemption (auto-switches from Wi-Fi to USB immediately upon cable connection).
+Ultra-low latency, high-FPS edge-to-edge display streaming with:
+  1. Strict USB First Priority (Auto-switches from Wi-Fi to USB immediately upon cable connection).
+  2. Real-time Hardware Mouse Cursor drawing (visible & responsive on phone).
+  3. Dynamic Multi-Monitor Support (Supports Win + P -> Extend / Duplicate / Second Screen Only).
+  4. Native High-DPI Razor-Sharp Text rendering at 120 FPS.
 """
 
 import sys
@@ -11,6 +13,7 @@ if hasattr(sys.stdout, 'reconfigure'):
 
 import argparse
 import ctypes
+from ctypes import wintypes
 import io
 import os
 import shutil
@@ -29,6 +32,22 @@ try:
 except Exception:
     from PIL import ImageGrab
 
+class POINT(ctypes.Structure):
+    _fields_ = [('x', ctypes.c_long), ('y', ctypes.c_long)]
+
+class CURSORINFO(ctypes.Structure):
+    _fields_ = [
+        ('cbSize', wintypes.DWORD),
+        ('flags', wintypes.DWORD),
+        ('hCursor', wintypes.HICON),
+        ('ptScreenPos', POINT)
+    ]
+
+CURSOR_SHOWING = 0x00000001
+CURSOR_PTS = np.array([
+    [0, 0], [0, 19], [5, 15], [9, 23], [12, 21], [8, 14], [14, 14]
+], dtype=np.int32)
+
 def attach_desktop():
     """Ensure this thread is attached to the interactive Windows input desktop."""
     try:
@@ -36,6 +55,22 @@ def attach_desktop():
         h_desk = user32.OpenInputDesktop(0, False, 0x01FF)
         if h_desk:
             user32.SetThreadDesktop(h_desk)
+    except Exception:
+        pass
+
+def draw_mouse_cursor(bgr, mon_left, mon_top, scale_x=1.0, scale_y=1.0):
+    """Draw the system mouse pointer onto the captured frame if present on this display."""
+    try:
+        ci = CURSORINFO()
+        ci.cbSize = ctypes.sizeof(CURSORINFO)
+        if ctypes.windll.user32.GetCursorInfo(ctypes.byref(ci)) and (ci.flags & CURSOR_SHOWING):
+            cx = int((ci.ptScreenPos.x - mon_left) * scale_x)
+            cy = int((ci.ptScreenPos.y - mon_top) * scale_y)
+            h, w = bgr.shape[:2]
+            if 0 <= cx < w and 0 <= cy < h:
+                shifted = CURSOR_PTS + [cx, cy]
+                cv2.fillPoly(bgr, [shifted], (255, 255, 255))
+                cv2.polylines(bgr, [shifted], True, (0, 0, 0), 1, cv2.LINE_AA)
     except Exception:
         pass
 
@@ -65,7 +100,6 @@ def ensure_adb_server():
         pass
 
     try:
-        # Start detached daemon without blocking
         DETACHED_FLAG = 0x00000008 | 0x00000200
         subprocess.Popen([ADB_BIN, "start-server"],
                          stdout=subprocess.DEVNULL,
@@ -80,7 +114,7 @@ def get_connected_usb_device():
     """
     Direct ultra-fast socket query to ADB server on 127.0.0.1:5037.
     Returns physical USB device serial, or None.
-    Filters out Wi-Fi / TCP connections (which contain colons).
+    Filters out Wi-Fi / TCP connections.
     """
     ensure_adb_server()
     s = socket.socket()
@@ -192,11 +226,22 @@ def find_active_stream_socket(manual_ip=None):
 
     return None, None, False
 
+def select_target_monitor(sct):
+    """
+    Select appropriate monitor for Windows Projection modes:
+    - Multiple monitors (Extend mode): Captures Display 2 (the extended virtual display)
+    - Single/Duplicate: Captures Display 1
+    """
+    if len(sct.monitors) > 2:
+        return sct.monitors[2], "🖥️ EXTENDED SECONDARY SCREEN (Display 2)"
+    else:
+        return sct.monitors[1], "🖥️ PRIMARY / DUPLICATE SCREEN (Display 1)"
+
 def main():
     parser = argparse.ArgumentParser(description="Air Connect Pro Screen Extender")
     parser.add_argument("--fps", type=int, default=120, help="Target FPS (60, 90, 120, 144). Default is 120.")
     parser.add_argument("--ip", type=str, default=None, help="Optional manual phone IP for Wi-Fi stream.")
-    parser.add_argument("--scale", type=float, default=1.0, help="Resolution scale (e.g. 1.0 for native 1080p, 0.85 for 900p).")
+    parser.add_argument("--scale", type=float, default=1.0, help="Resolution scale (default 1.0 for native 1080p).")
     args = parser.parse_args()
 
     target_fps = max(30, min(144, args.fps))
@@ -207,8 +252,8 @@ def main():
     print("=" * 68)
     print(f"  Target Frame Rate : {target_fps} FPS (High-End AMOLED 120Hz/144Hz)")
     print(f"  Priority Policy   : [FIRST PRIORITY: USB CABLE] > [FALLBACK: Wi-Fi]")
-    print(f"  Capture Engine    : {'OpenCV + MSS (Ultra Fast)' if HAS_OPENCV else 'Pillow ImageGrab'}")
-    print("  Display Mode      : Edge-to-Edge Fullscreen (Zero UI Borders)")
+    print(f"  Cursor Mode       : Hardware Mouse Pointer Overlay (Live Drawn)")
+    print(f"  Windows Projection: Win + P (Extend / Duplicate / Second Screen)")
     print(f"  ADB Engine        : Integrated Direct Socket + {os.path.basename(ADB_BIN)}")
     print("=" * 68)
 
@@ -249,55 +294,69 @@ def main():
             time.sleep(1.5)
             continue
 
+        active_mon, mon_desc = select_target_monitor(sct)
         print(f"\n[+] CONNECTION ESTABLISHED!")
-        print(f"    Mode    : {conn_label}")
-        print(f"    Target  : {target_fps} FPS Fullscreen")
+        print(f"    Link Mode : {conn_label}")
+        print(f"    Display   : {mon_desc}")
+        print(f"    Target    : {target_fps} FPS Fullscreen")
         if is_usb_active:
-            print("    Status  : ⚡ First Priority USB Active - Maximum 120 FPS Zero Latency")
+            print("    Status    : ⚡ First Priority USB Active - Maximum 120 FPS Zero Latency")
         else:
-            print("    Status  : 🟡 Streaming over Wi-Fi (Plug in USB anytime to auto-switch to USB!)")
+            print("    Status    : 🟡 Streaming over Wi-Fi (Plug in USB anytime to auto-switch to USB!)")
 
         fps_timer = time.time()
         fps_frames = 0
         last_usb_check = time.time()
+        last_mon_check = time.time()
 
         try:
             while True:
                 cycle_start = time.time()
                 attach_desktop()
 
-                # DYNAMIC USB HOT-PLUG PREEMPTION:
-                # If currently on Wi-Fi, check every 2s if USB was plugged in!
-                if not is_usb_active:
-                    now = time.time()
-                    if now - last_usb_check >= 2.0:
-                        last_usb_check = now
-                        plugged_dev = get_connected_usb_device()
-                        if plugged_dev:
-                            print(f"\n\n[⚡ PRIORITY OVERRIDE] USB Cable Detected ({plugged_dev})!")
-                            print("  -> Auto-switching stream from Wi-Fi to USB for First Priority Zero Latency...")
-                            sock.close()
-                            break
+                # Dynamic check for monitor changes (e.g. user toggles Win + P Extend/Duplicate)
+                now = time.time()
+                if now - last_mon_check >= 1.5:
+                    last_mon_check = now
+                    current_mon, current_desc = select_target_monitor(sct)
+                    if current_desc != mon_desc:
+                        active_mon = current_mon
+                        mon_desc = current_desc
+                        print(f"\n[DISPLAY CHANGED] Now streaming: {mon_desc}")
+
+                # Dynamic USB Hot-Plug Preemption:
+                if not is_usb_active and (now - last_usb_check >= 2.0):
+                    last_usb_check = now
+                    plugged_dev = get_connected_usb_device()
+                    if plugged_dev:
+                        print(f"\n\n[⚡ PRIORITY OVERRIDE] USB Cable Detected ({plugged_dev})!")
+                        print("  -> Auto-switching stream from Wi-Fi to USB for First Priority Zero Latency...")
+                        sock.close()
+                        break
 
                 jpeg_data = None
                 img_w, img_h = 1920, 1080
 
                 if HAS_OPENCV and sct is not None:
-                    # Select primary display (or extended display 2 if present)
-                    mon = sct.monitors[2] if len(sct.monitors) > 2 else sct.monitors[1]
-                    shot = sct.grab(mon)
+                    shot = sct.grab(active_mon)
                     raw_w, raw_h = shot.width, shot.height
                     frame = np.frombuffer(shot.raw, dtype=np.uint8).reshape((raw_h, raw_w, 4))
-                    bgr = frame[:, :, :3]
+                    bgr = frame[:, :, :3].copy()
 
-                    # Scale if requested or default to crisp 1600x900 / native
+                    # Scale if requested
+                    scale_x, scale_y = 1.0, 1.0
                     if args.scale < 1.0:
                         target_w = int(raw_w * args.scale)
                         target_h = int(raw_h * args.scale)
+                        scale_x = target_w / float(raw_w)
+                        scale_y = target_h / float(raw_h)
                         bgr = cv2.resize(bgr, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
-                    
+
+                    # Draw hardware mouse cursor onto frame
+                    draw_mouse_cursor(bgr, active_mon['left'], active_mon['top'], scale_x, scale_y)
+
                     img_w, img_h = bgr.shape[1], bgr.shape[0]
-                    # Quality 80 provides crystal clear text with small packet size
+                    # Quality 80 gives razor-sharp text with compact bandwidth
                     _, enc = cv2.imencode('.jpg', bgr, [cv2.IMWRITE_JPEG_QUALITY, 80])
                     jpeg_data = enc.tobytes()
                 else:

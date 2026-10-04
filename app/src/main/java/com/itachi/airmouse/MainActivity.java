@@ -390,7 +390,20 @@ public class MainActivity extends AppCompatActivity {
 
     private void setImmersiveFullscreen(boolean enable) {
         try {
-            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+            android.view.Window window = getWindow();
+            WindowCompat.setDecorFitsSystemWindows(window, !enable);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                WindowManager.LayoutParams lp = window.getAttributes();
+                if (enable) {
+                    lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                } else {
+                    lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+                }
+                window.setAttributes(lp);
+            }
+
+            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, window.getDecorView());
             if (controller != null) {
                 if (enable) {
                     controller.hide(WindowInsetsCompat.Type.systemBars());
@@ -399,7 +412,27 @@ public class MainActivity extends AppCompatActivity {
                     controller.show(WindowInsetsCompat.Type.systemBars());
                 }
             }
+
+            View decorView = window.getDecorView();
+            if (enable) {
+                decorView.setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                );
+            }
         } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && (currentMode == MODE_FULLSCREEN_TOUCHPAD || currentMode == MODE_SCREEN_EXTENDER)) {
+            setImmersiveFullscreen(true);
+        }
     }
 
     private void enableHighRefreshRate() {
@@ -567,31 +600,167 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Touch on extender surface forwards cursor clicks to laptop
+        // Multi-touch Extender Interaction: Click, Drag-and-Drop, 2-Finger Right-Click, 2-Finger Scroll, Long-Press
         findViewById(R.id.viewExtenderSurfaceContainer).setOnTouchListener(new View.OnTouchListener() {
+            private float startX, startY;
             private float lastX, lastY;
             private long downTime;
+            private boolean isExtenderHoldDragging = false;
+            private boolean hasMoved = false;
+
+            // Double tap to drag
+            private long lastTapUpTime = 0L;
+            private float lastTapUpX = 0f;
+            private float lastTapUpY = 0f;
+            private boolean isDoubleTapDragging = false;
+
+            // Two-finger gestures
+            private boolean isTwoFinger = false;
+            private boolean twoFingerScrolled = false;
+            private long twoFingerDownTime = 0L;
+            private float twoFingerStartY = 0f;
+            private float lastTwoFingerY = 0f;
+
+            private final Runnable longPressDragRunnable = () -> {
+                if (!hasMoved && !isTwoFinger && !isDoubleTapDragging) {
+                    isExtenderHoldDragging = true;
+                    triggerHaptic(35);
+                    HidMouseService.sendButtonState(1, true); // Hold left click down for drag!
+                    showVolumeHud("🖐️", "HOLD TO DRAG ACTIVE");
+                }
+            };
 
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 resetAutoDockTimer();
-                switch (event.getActionMasked()) {
+                int action = event.getActionMasked();
+                int pointerCount = event.getPointerCount();
+
+                switch (action) {
                     case MotionEvent.ACTION_DOWN:
+                        startX = event.getX();
+                        startY = event.getY();
                         lastX = event.getX();
                         lastY = event.getY();
                         downTime = System.currentTimeMillis();
+                        isTwoFinger = false;
+                        twoFingerScrolled = false;
+                        isExtenderHoldDragging = false;
+                        hasMoved = false;
+
+                        // Check double-tap to drag
+                        long timeSinceLastTap = System.currentTimeMillis() - lastTapUpTime;
+                        float distFromLastTap = (float) Math.hypot(startX - lastTapUpX, startY - lastTapUpY);
+                        if (timeSinceLastTap < 420L && distFromLastTap < 140f) {
+                            isDoubleTapDragging = true;
+                            holdDragHandler.removeCallbacks(longPressDragRunnable);
+                            triggerHaptic(35);
+                            HidMouseService.sendButtonState(1, true); // Lock left button down
+                            showVolumeHud("🖐️", "DRAG & DROP ACTIVE");
+                            return true;
+                        }
+
+                        isDoubleTapDragging = false;
+                        holdDragHandler.postDelayed(longPressDragRunnable, 350L);
                         return true;
+
+                    case MotionEvent.ACTION_POINTER_DOWN:
+                        holdDragHandler.removeCallbacks(longPressDragRunnable);
+                        if (pointerCount == 2) {
+                            isTwoFinger = true;
+                            twoFingerScrolled = false;
+                            twoFingerDownTime = System.currentTimeMillis();
+                            twoFingerStartY = (event.getY(0) + event.getY(1)) / 2f;
+                            lastTwoFingerY = twoFingerStartY;
+                            if (isExtenderHoldDragging || isDoubleTapDragging) {
+                                HidMouseService.sendButtonState(1, false);
+                                isExtenderHoldDragging = false;
+                                isDoubleTapDragging = false;
+                            }
+                        }
+                        return true;
+
                     case MotionEvent.ACTION_MOVE:
-                        float dx = event.getX() - lastX;
-                        float dy = event.getY() - lastY;
-                        HidMouseService.sendTouchMove(dx, dy);
-                        lastX = event.getX();
-                        lastY = event.getY();
+                        if (pointerCount == 1 && !isTwoFinger) {
+                            float dx = event.getX() - lastX;
+                            float dy = event.getY() - lastY;
+                            float distFromStart = (float) Math.hypot(event.getX() - startX, event.getY() - startY);
+
+                            if (distFromStart > 16f) {
+                                hasMoved = true;
+                                if (!isExtenderHoldDragging && !isDoubleTapDragging) {
+                                    holdDragHandler.removeCallbacks(longPressDragRunnable);
+                                }
+                            }
+
+                            if (Math.hypot(dx, dy) > 0.8) {
+                                HidMouseService.sendTouchMove(dx, dy);
+                            }
+                            lastX = event.getX();
+                            lastY = event.getY();
+                        } else if (pointerCount >= 2) {
+                            // Two-finger scroll
+                            float currentTwoFingerY = (event.getY(0) + event.getY(1)) / 2f;
+                            float deltaScrollY = currentTwoFingerY - lastTwoFingerY;
+
+                            if (Math.abs(deltaScrollY) > 18f) {
+                                twoFingerScrolled = true;
+                                int scrollWheelSteps = (int) (deltaScrollY / 18f);
+                                if (scrollWheelSteps != 0) {
+                                    HidMouseService.sendScroll(scrollWheelSteps);
+                                    triggerHaptic(10);
+                                    lastTwoFingerY = currentTwoFingerY;
+                                }
+                            }
+                        }
                         return true;
+
+                    case MotionEvent.ACTION_POINTER_UP:
+                        if (pointerCount == 2 && isTwoFinger && !twoFingerScrolled) {
+                            long contactTime = System.currentTimeMillis() - twoFingerDownTime;
+                            if (contactTime < 320L) {
+                                triggerHaptic(25);
+                                HidMouseService.sendClick(2); // Two-finger tap = Right Click!
+                                showVolumeHud("🖱️", "RIGHT CLICK");
+                            }
+                        }
+                        return true;
+
                     case MotionEvent.ACTION_UP:
-                        if (System.currentTimeMillis() - downTime < 220) {
+                        holdDragHandler.removeCallbacks(longPressDragRunnable);
+
+                        // Release hold drag or double tap drag if active
+                        if (isExtenderHoldDragging || isDoubleTapDragging) {
+                            triggerHaptic(20);
+                            HidMouseService.sendButtonState(1, false);
+                            isExtenderHoldDragging = false;
+                            isDoubleTapDragging = false;
+                            lastTapUpTime = 0L;
+                            return true;
+                        }
+
+                        long elapsed = System.currentTimeMillis() - downTime;
+                        float distTotal = (float) Math.hypot(event.getX() - startX, event.getY() - startY);
+
+                        if (!hasMoved && !isTwoFinger && distTotal < 22f && elapsed < 280L) {
                             triggerHaptic(18);
-                            HidMouseService.sendClick(1);
+                            HidMouseService.sendClick(1); // Clean Left Click
+                            lastTapUpTime = System.currentTimeMillis();
+                            lastTapUpX = event.getX();
+                            lastTapUpY = event.getY();
+                        } else {
+                            lastTapUpTime = 0L;
+                        }
+
+                        isTwoFinger = false;
+                        return true;
+
+                    case MotionEvent.ACTION_CANCEL:
+                        holdDragHandler.removeCallbacks(longPressDragRunnable);
+                        if (isExtenderHoldDragging || isDoubleTapDragging) {
+                            HidMouseService.sendButtonState(1, false);
+                            isExtenderHoldDragging = false;
+                            isDoubleTapDragging = false;
                         }
                         return true;
                 }
